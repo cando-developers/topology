@@ -157,4 +157,10 @@
    #:verify-foldamer-describes-oligomer-space
    #:valid-trainer-contexts
    #:assemble-fragment-conformations-map
+
+   #:foldamer-setup
+   #:foldamer-status
+   #:foldamer-extract-conformations
+   #:foldamer-run-node
+
    ))
