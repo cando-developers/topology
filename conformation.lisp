@@ -8,6 +8,8 @@
    (ataggregate :initarg :ataggregate :accessor ataggregate)
    (joint-tree :initarg :joint-tree :accessor joint-tree)))
 
+(cando:make-class-save-load conformation)
+
 (defgeneric foldamer-monomer-context (focus-monomer oligomer foldamer)
   (:documentation "Return a monomer-context for a monomer in the oligomer using the foldamer.
 Specialize the foldamer argument to provide methods"))

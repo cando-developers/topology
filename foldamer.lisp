@@ -477,7 +477,7 @@
 (defun verify-foldamer-describes-oligomer-space (foldamer oligomer-space &key print)
   "Check that every monomer in the oligomer space has a monomer-context within the foldamer"
   (loop for monomer across (topology:monomers oligomer-space)
-        for monomer-context = (foldamer-monomer-context monomer oligomer-space foldamer)
+        for monomer-context = (topology:foldamer-monomer-context monomer oligomer-space foldamer)
         if monomer-context
           do (when print
                (format t "monomer-context ~a~%   is matched by ~a~%" (recursive-dump-local-monomer-context monomer nil 1) monomer-context))
