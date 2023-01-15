@@ -3,13 +3,12 @@
 
 (defun done-data (trainer-context)
   (multiple-value-bind (input-file done-file)
-      (foldamer:calculate-files trainer-context)
+    (foldamer:calculate-files trainer-context)
     (declare (ignore input-file))
     (if (null (probe-file done-file))
-        (values nil)
-        (let* ((done-fin (open done-file :direction :input))
-               (done-data (read done-fin)))
-	  done-data))))
+	(values nil)
+      (with-open-file (done-fin done-file :direction :input)
+        (read done-fin)))))
 
 (defun needs-work (trainer-context steps)
   "Return (values needs-work hits) 
@@ -20,7 +19,7 @@
 	 (hits (getf done-data :hits)))
     (or (null done-data) (or (< done-steps steps) (= hits 0)))))
 
-(defun max-finished-steps (&optional (spiros *spiros*))
+(defun max-finished-steps (spiros)
   (let ((max-finished-steps 0)
         (valid-trainer-contexts (foldamer:valid-trainer-contexts spiros)))
     (loop for context in valid-trainer-contexts
@@ -36,7 +35,7 @@
     max-finished-steps))
 
 
-(defun needs-extract-conformations (path &optional (spiros *spiros*))
+(defun needs-extract-conformations (path spiros)
   (let ((valid-trainer-contexts (foldamer:valid-trainer-contexts spiros))
         (conformations-pathname (merge-pathnames *conformations-filename* path)))
     (if (null (probe-file conformations-pathname))
@@ -53,11 +52,10 @@
           (< conformations-write-date latest-done-file-write-date)))))
 
 (defun foldamer-update-trainers (spiros &key remove-unused force-save)
-  (foldamer:verify-foldamer-describes-oligomer-space spiros olig-space)
   (foldamer:maybe-remove-unused-trainers spiros #P"./" :doit remove-unused)
   (foldamer:generate-training-oligomers spiros #P"./" :force-save force-save))
 
-(defun foldamer-status (&key (spiros *spiros*))
+(defun foldamer-status (&key spiros)
   (let* ((trainer-contexts (foldamer:valid-trainer-contexts spiros))
 	 (trainer-done-data (make-hash-table :test 'equal))
 	 (max-finished-steps (max-finished-steps spiros)))
@@ -82,8 +80,9 @@
     (format t "Number of trainers ~a~%" (length trainer-contexts))
     ))
 			      
-(defun foldamer-setup (&key (spiros *spiros*)
-                         (nodes 12)
+(defun foldamer-setup (spiros
+                         &key
+			 (nodes 12)
                          (clasp "$CLASP -l code.lisp")
                          (script "jobs.dat")
                          (finished-steps 2 finished-steps-p)
@@ -118,14 +117,14 @@
                  #+(or)(format t "~a ~a~%" node-index trainer-context))))
     (with-open-file (fout script :direction :output :if-exists :supersede)
       (loop for node-index below (min jobs-per-node (hash-table-count node-work))
-            do (format fout "~a -e \"(foldamer-run-node ~a :steps ~a)\"~%"
+            do (format fout "~a -e \"(foldamer:foldamer-run-node ~a :steps ~a)\"~%"
                        clasp
                        node-index
                        steps)))
     (cando:save-cando node-work "node-work.cando")
     (format t "~a trainers need to be trained~%" (if (= trainer-count 0) "No" trainer-count))
     (when (= trainer-count 0)
-      (if (needs-extract-conformations #P"./")
+      (if (needs-extract-conformations #P"./" spiros)
           (format t "Needs foldamer-extract-conformations~%")
           (format t "Ready to build spiroligomers~%"))))
   (sys:quit))
@@ -162,7 +161,3 @@
           (mapc #'one-trainer node-trainers))))
   (unless testing (sys:quit)))
 
-(defun foldamer-build-conformation (&optional (output-file "conf.mol2"))
-  (let* ((conformations (cando:load-cando "conformations.cando"))
-         (agg (topology::build-conformation olig-space conformations)))
-     (cando:save-mol2 agg "conf.mol2" :use-sybil-types t)))
