@@ -34,8 +34,7 @@
    (ggp-atres-name :initarg :ggp-atres-name :accessor ggp-atres-name)
    (dihedral-rad :initarg :dihedral-rad :accessor dihedral-rad)))
 
-(cando:make-class-save-load
- out-of-focus-internal
+(cando:make-class-save-load out-of-focus-internal
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -69,8 +68,7 @@
                                      :initarg :monomer-context-to-fragment-conformations
                                      :accessor monomer-context-to-fragment-conformations)))
 
-(cando:make-class-save-load
- fragment-conformations-map
+(cando:make-class-save-load fragment-conformations-map
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t))))

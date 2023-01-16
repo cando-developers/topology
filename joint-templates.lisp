@@ -6,8 +6,7 @@
    (constitution-atoms-index :initarg :constitution-atoms-index :accessor constitution-atoms-index)
    ))
 
-(cando:make-class-save-load
- joint-template
+(cando:make-class-save-load joint-template
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -17,8 +16,7 @@
   ((children :initform nil :initarg :children :accessor children)
    ))
 
-(cando:make-class-save-load
- bonded-joint-template)
+(cando:make-class-save-load bonded-joint-template)
 
 (defun make-bonded-joint-template (constitution-atoms-index &key atom-name parent)
   (make-instance 'bonded-joint-template
@@ -29,8 +27,7 @@
 (defclass in-plug-bonded-joint-template (bonded-joint-template)
   ((in-plug :initarg :in-plug :accessor in-plug)))
 
-(cando:make-class-save-load
- in-plug-bonded-joint-template)
+(cando:make-class-save-load in-plug-bonded-joint-template)
 
 (defun make-in-plug-bonded-joint-template (constitution-atoms-index &key atom-name parent in-plug)
   (make-instance 'in-plug-bonded-joint-template
@@ -42,8 +39,7 @@
 (defclass complex-bonded-joint-template (bonded-joint-template)
   ((input-stub-joints :initform (make-array 2) :initarg :input-stub-joints :accessor input-stub-joints)))
 
-(cando:make-class-save-load
- complex-bonded-joint-template)
+(cando:make-class-save-load complex-bonded-joint-template)
 
 (defun make-complex-bonded-joint-template (constitution-atoms-index &key atom-name stub-joints)
   (cond
@@ -72,8 +68,7 @@
 (defclass jump-joint-template (joint-template)
   ((children :initform nil :initarg :children :accessor children)))
 
-(cando:make-class-save-load
- jump-joint-template)
+(cando:make-class-save-load jump-joint-template)
 
 (defun make-jump-joint-template (constitution-atoms-index &key atom-name)
   (make-instance 'jump-joint-template

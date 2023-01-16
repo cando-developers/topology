@@ -84,8 +84,7 @@
                          :accessor dihedral-max-degrees)
    (weight :initarg :weight :accessor weight)))
 
-(cando:make-class-save-load
- dihedral-restraint
+(cando:make-class-save-load dihedral-restraint
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -110,8 +109,7 @@
    ))
 
 
-(cando:make-class-save-load
- topology
+(cando:make-class-save-load topology
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -165,8 +163,7 @@
                :initarg :atom-names
                :accessor atom-names)))
 
-(cando:make-class-save-load
- plug
+(cando:make-class-save-load plug
  :print-unreadably
  (lambda (obj strea)
    (print-unreadable-object (obj stream :type t)
@@ -199,8 +196,7 @@
               :accessor couplings)
    (monomers :initarg :monomers :accessor monomers)))
 
-(cando:make-class-save-load
- monomer
+(cando:make-class-save-load monomer
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -262,8 +258,7 @@
    (source-monomer :initarg :source-monomer :accessor source-monomer)
    (target-monomer :initarg :target-monomer :accessor target-monomer)))
 
-(cando:make-class-save-load
- directional-coupling
+(cando:make-class-save-load directional-coupling
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -307,8 +302,7 @@
    (couplings :initform (make-array 16 :adjustable t :fill-pointer 0)
               :initarg :couplings :accessor couplings)))
 
-(cando:make-class-save-load
- oligomer-space
+(cando:make-class-save-load oligomer-space
   :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t))))
@@ -338,8 +332,7 @@
   ((monomer-indices :initarg :monomer-indices :accessor monomer-indices)
    (oligomer-space :initarg :oligomer-space :accessor oligomer-space)))
 
-(cando:make-class-save-load
- oligomer)
+(cando:make-class-save-load oligomer)
 
 (defun goto-sequence (oligomer index)
   (let* ((bases (loop for monomer across (monomers (oligomer-space oligomer))

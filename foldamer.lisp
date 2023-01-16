@@ -6,24 +6,77 @@
              (format stream "no-matching-context ~a" (context condition)))))
 
 (defclass node ()
-  ((name :initarg :name :accessor name)))
+  ((id :initform (gensym) :initarg :id :accessor id)
+   (name :initarg :name :accessor name)
+   (spanning-depth :initform nil :initarg :spanning-depth :initform nil :accessor spanning-depth)
+   (label :initarg :label :accessor label)))
 
-(defmethod print-object ((obj node) stream)
-  (print-unreadable-object (obj stream :type t :identity t)
-    (format stream "~a" (name obj))))
+(cando:make-class-save-load node
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t :identity t)
+     (format stream "~a :spanning-depth ~a :label ~a" (name obj) (spanning-depth obj) (label obj)))))
+
+(defclass cap-node (node)
+  ())
+
+(cando:make-class-save-load cap-node
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t :identity t)
+     (format stream "~a :spanning-depth ~a :label ~a" (name obj) (spanning-depth obj) (label obj)))))
 
 (defclass edge ()
   ((from-node :initarg :from-node :accessor from-node)
    (to-node :initarg :to-node :accessor to-node)
-   (name :initarg :name :accessor name)))
+   (name :initarg :name :accessor name)
+   (raw-name :initarg :raw-name :accessor raw-name)))
 
-(defmethod print-object ((obj edge) stream)
-  (print-unreadable-object (obj stream :type t)
-    (format stream "~a ~a ~a" (from-node obj) (name obj) (to-node obj))))
+(cando:make-class-save-load edge
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a ~a ~a" (from-node obj) (raw-name obj) (to-node obj)))))
+
+(defun other-node (edge node)
+  "If the edge contains node then return the other node, otherwise nil"
+  (cond
+    ((eq (to-node edge) node)
+     (from-node edge))
+    ((eq (from-node edge) node)
+     (to-node edge))
+    (t nil)))
 
 (defclass dag ()
-  ((nodes :initform nil :accessor nodes)
+  ((label :initarg :label :accessor label)
+   (root :initarg :root :accessor root)
+   (nodes :initform nil :accessor nodes)
    (edges :initform nil :accessor edges)))
+
+(cando:make-class-save-load dag
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~s" (label obj)))))
+
+(defun recursive-spanning-tree (root depth dag seen)
+  (if (gethash root seen)
+      nil
+      (progn
+        (setf (spanning-depth root) depth
+              (gethash root seen) t)
+        (let ((neighbors (loop for edge in (edges dag)
+                               for other-node = (other-node edge root)
+                               when other-node
+                                 collect other-node)))
+          (append neighbors
+                  (loop for neighbor in neighbors
+                        append (recursive-spanning-tree neighbor (1+ depth) dag seen)))))))
+
+(defun walk-spanning-tree (dag)
+  (let ((root (root dag))
+        (seen (make-hash-table)))
+    (cons root (recursive-spanning-tree root 0 dag seen))))
 
 (defun ensure-monomer (node map)
   (let ((monomer (gethash node map)))
@@ -31,8 +84,9 @@
       (error "Could not find monomer for node ~a" node))
     monomer))
 
-(defun oligomer-space-from-dag (foldamer dag focus-node topology-groups)
-  (let ((node-to-monomer (make-hash-table))
+(defun oligomer-space-from-dag (foldamer dag topology-groups)
+  (let ((focus-node (root dag))
+        (node-to-monomer (make-hash-table))
         (oligomer-space (make-instance 'topology:oligomer-space
                                        :foldamer foldamer)))
     (loop for node in (nodes dag)
@@ -64,26 +118,28 @@
           do (vector-push-extend directional-coupling (topology:couplings oligomer-space)))
     (values oligomer-space (gethash focus-node node-to-monomer))))
 
-(defun ensure-name (maybe-name)
+(defun node-from-name (maybe-name depth label)
   (cond
     ((and (consp maybe-name) (eq (car maybe-name) :cap))
-     (cadr maybe-name))
+     (make-instance 'cap-node :name (cadr maybe-name) :label label))
     ((symbolp maybe-name)
-     maybe-name)
-    (t (error "Illegal ensure-name ~s" maybe-name))))
+     (make-instance 'node :name maybe-name :label label))
+    (t (error "Illegal name in node-from-name ~s" maybe-name))))
 
-(defun parse-recursive (sub-tree prev-node dag)
+(defun parse-recursive (sub-tree prev-node dag depth label)
+  (declare (ignore label))
   (cond
     ((null sub-tree))
     ((consp (car sub-tree))
-     (parse-recursive (car sub-tree) prev-node dag)
-     (parse-recursive (cdr sub-tree) prev-node dag))
+     (parse-recursive (car sub-tree) prev-node dag (1+ depth) :head-cons )
+     (parse-recursive (cdr sub-tree) prev-node dag (1+ depth) :tail-cons))
     ((symbolp (car sub-tree))
      (let* ((plug-name (car sub-tree))
-            (node (make-instance 'node :name (ensure-name (cadr sub-tree)))))
+            (node (node-from-name (cadr sub-tree) depth label)))
        (cond
          ((topology:in-plug-name-p plug-name)
           (let ((edge (make-instance 'edge
+                                     :raw-name plug-name
                                      :name (topology:coupling-name plug-name)
                                      :from-node node
                                      :to-node prev-node)))
@@ -91,31 +147,51 @@
             (push edge (edges dag))))
          ((topology:out-plug-name-p plug-name)
           (let ((edge (make-instance 'edge
+                                     :raw-name plug-name
                                      :name (topology:coupling-name plug-name)
                                      :from-node prev-node
                                      :to-node node)))
             (push node (nodes dag))
             (push edge (edges dag))))
          (t (error "Illegal plug-name ~s" plug-name)))
-       (parse-recursive (cddr sub-tree) node dag)))
+       (parse-recursive (cddr sub-tree) node dag depth :symbol)))
     (t (error "Illegal sub-tree ~s" sub-tree))))
 
+(defun parse-label (head)
+  head)
 
-(defun parse-for-oligomer-space (foldamer tree)
-  (let ((dag (make-instance 'dag))
-        (node (make-instance 'node :name (ensure-name (car tree)))))
+(defun parse-dag-for-oligomer-space (labeled-tree)
+  (let* ((label (parse-label (car labeled-tree)))
+         (tree (cdr labeled-tree))
+         (node (node-from-name (car tree) 0 :top))
+         (dag (make-instance 'dag :root node :label label)))
     (push node (nodes dag))
-    (parse-recursive (cdr tree) node dag)
-    (oligomer-space-from-dag foldamer dag node topology::*topology-groups*)))
+    (parse-recursive (cdr tree) node dag 1 :top)
+    (walk-spanning-tree dag)
+    dag))
+
+(defun validate-dag (dag)
+  (let ((root (root dag))
+        (label (label dag)))
+    (loop for node in (nodes dag)
+          for node-name = (name node)
+          for depth = (spanning-depth node)
+          do (cond
+               ((= 1 depth)
+                (when (typep node 'cap-node)
+                  (warn "dag ~s has a cap-node ~s directly connected to the root" label node-name)))
+               ((> depth 1)
+                (when (not (typep node 'cap-node))
+                  (warn "dag ~s has node ~s at level ~a that should be a cap node or eliminated" label node-name depth)))))))
 
 (defclass training-oligomer-space ()
   ((expression :initarg :expression :accessor expression)
+   (expression-dag :initarg :expression-dag :accessor expression-dag)
    (oligomer-space :initarg :oligomer-space :accessor oligomer-space)
    (focus-monomer :initarg :focus-monomer :accessor focus-monomer)
    (monomer-context-matcher :initarg :monomer-context-matcher :accessor monomer-context-matcher)))
 
-(cando:make-class-save-load
- training-oligomer-space
+(cando:make-class-save-load training-oligomer-space
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -125,8 +201,7 @@
   ((topologys :initform nil :initarg :topologys :accessor topologys)
    (training-oligomer-spaces :initarg :training-oligomer-spaces :accessor training-oligomer-spaces)))
 
-(cando:make-class-save-load
- foldamer)
+(cando:make-class-save-load foldamer)
 
 (defparameter *foldamers* (make-hash-table))
 
@@ -136,19 +211,22 @@
         (foldamer (make-instance 'foldamer)))
     (let ((training-oligomer-spaces
             (loop for context in contexts
-                  collect (multiple-value-bind (oligomer-space focus-monomer)
-                              (parse-for-oligomer-space foldamer context)
-                            #+(or)(format t "trainers ~a ~a~%" (topology:number-of-sequences oligomer-space) context)
-                            (let ((topologys-in-oligomer-space (topology:topologys-in-oligomer-space oligomer-space)))
-                              (loop for topology in topologys-in-oligomer-space
-                                    do (pushnew topology topologys)))
-                            (incf total-sequences (topology:number-of-sequences oligomer-space))
-                            (let ((monomer-context-matcher (monomer-context:parse context)))
-                              (make-instance 'training-oligomer-space
-                                             :expression context
-                                             :oligomer-space oligomer-space
-                                             :focus-monomer focus-monomer
-                                             :monomer-context-matcher monomer-context-matcher))))))
+                  collect (let ((dag (parse-dag-for-oligomer-space context)))
+                            (validate-dag dag)
+                            (multiple-value-bind (oligomer-space focus-monomer)
+                                (oligomer-space-from-dag foldamer dag topology::*topology-groups*)
+                              #+(or)(format t "trainers ~a ~a~%" (topology:number-of-sequences oligomer-space) context)
+                              (let ((topologys-in-oligomer-space (topology:topologys-in-oligomer-space oligomer-space)))
+                                (loop for topology in topologys-in-oligomer-space
+                                      do (pushnew topology topologys)))
+                              (incf total-sequences (topology:number-of-sequences oligomer-space))
+                              (let ((monomer-context-matcher (monomer-context:parse context)))
+                                (make-instance 'training-oligomer-space
+                                               :expression context
+                                               :expression-dag dag
+                                               :oligomer-space oligomer-space
+                                               :focus-monomer focus-monomer
+                                               :monomer-context-matcher monomer-context-matcher)))))))
       (reinitialize-instance foldamer
                              :topologys topologys
                              :training-oligomer-spaces training-oligomer-spaces)
@@ -476,10 +554,21 @@
 
 (defun verify-foldamer-describes-oligomer-space (foldamer oligomer-space &key print)
   "Check that every monomer in the oligomer space has a monomer-context within the foldamer"
-  (loop for monomer across (topology:monomers oligomer-space)
-        for monomer-context = (topology:foldamer-monomer-context monomer oligomer-space foldamer)
-        if monomer-context
-          do (when print
-               (format t "monomer-context ~a~%   is matched by ~a~%" (recursive-dump-local-monomer-context monomer nil 1) monomer-context))
-        else
-          do (error "Foldamer does not describe oligomer space")))
+  (let ((used-contexts-set (make-hash-table :test 'equal)))
+    (loop for monomer across (topology:monomers oligomer-space)
+          for monomer-context = (topology:foldamer-monomer-context monomer oligomer-space foldamer)
+          do (format t "monomer-context = ~s~%" monomer-context)
+          do (setf (gethash monomer-context used-contexts-set) t)
+          if monomer-context
+            do (when print
+                 (format t "monomer-context ~a~%   is matched by ~a~%" (recursive-dump-local-monomer-context monomer nil 1) monomer-context))
+          else
+            do (error "Foldamer does not describe oligomer space"))
+    (let (used-contexts unused-contexts)
+      (maphash (lambda (key value)
+                 (declare (ignore value))
+                 (if (gethash key used-contexts-set)
+                     (push key used-contexts)
+                     (push key unused-contexts)))
+               used-contexts-set)
+      (values t used-contexts unused-contexts))))
