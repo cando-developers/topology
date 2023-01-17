@@ -39,6 +39,10 @@
    #:in-plug
    #:name
    #:id
+   #:source-monomer
+   #:target-monomer
+   #:source-plug-name
+   #:target-plug-name
    #:children
    #:constitution
    #:atom-name
@@ -128,7 +132,15 @@
    #:build-all-atom-tree-external-coordinates
    #:define-part
    #:*topology-groups*
-   #:restraints))
+   #:restraints
+
+   #:missing-fragment-match
+   #:fragment-match-key
+   #:make-fragment-match-key
+   #:matched-fragment-conformations-map
+   #:missing-fragment-matches
+   #:fragment-matches
+   #:monomer-context-index-map))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -150,6 +162,7 @@
    #:maybe-remove-unused-trainers
    #:generate-training-oligomers
    #:find-oligomer-for-monomer-context
+   #:all-monomer-contexts-in-training-oligomer-space
    #:build-trainer
    #:prepare-to-build-trainer
    #:foldamer-monomer-context

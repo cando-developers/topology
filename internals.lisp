@@ -4,7 +4,12 @@
   ((name :initarg :name :accessor name)
    ))
 
-(cando:make-class-save-load internal)
+(cando:make-class-save-load
+ internal
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a" (name obj)))))
 
 (defclass jump-internal (internal)
   ())
@@ -16,7 +21,12 @@
    (angle :initarg :angle :accessor angle)
    (dihedral :initarg :dihedral :accessor dihedral)))
 
-(cando:make-class-save-load bonded-internal)
+(cando:make-class-save-load
+ bonded-internal
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a" (name obj)))))
 
 (defclass complex-bonded-internal (bonded-internal)
   ())
@@ -65,14 +75,37 @@
 
 (defclass fragment-conformations-map ()
   ((monomer-context-to-fragment-conformations :initform (make-hash-table :test 'equal)
-                                     :initarg :monomer-context-to-fragment-conformations
-                                     :accessor monomer-context-to-fragment-conformations)))
+                                              :initarg :monomer-context-to-fragment-conformations
+                                              :accessor monomer-context-to-fragment-conformations)))
 
 (cando:make-class-save-load fragment-conformations-map
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t))))
 
+(defclass matched-fragment-conformations-map (fragment-conformations-map)
+  ((missing-fragment-matches :initform nil
+                             :initarg :missing-fragment-matches
+                             :accessor missing-fragment-matches)
+   (fragment-matches :initform (make-hash-table :test 'equal)
+                     :initarg :fragment-matches
+                     :accessor fragment-matches)
+   (monomer-context-index-map :initform (make-hash-table :test 'equal)
+                     :initarg :monomer-context-index-map
+                     :accessor monomer-context-index-map)
+   ))
+
+(cando:make-class-save-load matched-fragment-conformations-map)
+
+(defstruct fragment-match-key
+  before-monomer-context-index
+  after-monomer-context-index
+  before-fragment-conformation-index)
+
+(defstruct missing-fragment-match
+  before-monomer-context
+  after-monomer-context
+  before-fragment-conformation-index)
 
 (defconstant +dihedral-threshold+ (* 10.0 0.0174533))
 

@@ -200,7 +200,7 @@
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
-     (format stream "~a" (monomers obj)))))
+     (format stream ":id ~a :monomers ~a" (id obj) (monomers obj)))))
 
 (defun number-of-stereoisomers (monomer)
   (length (monomers monomer)))
