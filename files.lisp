@@ -106,7 +106,8 @@
                                                          (molecule (topology:build-molecule oligomer))
                                                          (number-of-atoms (chem:number-of-atoms molecule)))
                                                     (cons number-of-atoms trainer-context))))
-         (trainers-that-need-work (sort unsorted-trainers-that-need-work #'> :key #'car)))
+         (trainers-that-need-work (sort unsorted-trainers-that-need-work #'< :key #'car)))
+    ;; Note: Sort order is reverse of what we want because below we push the trainer-context into list
     (format t "Maximum finished-steps ~a~%" max-finished-steps)
     (format t "New steps              ~a~%" steps)
     (loop for pair in trainers-that-need-work
@@ -116,6 +117,7 @@
           for node-index = (mod index node-total)
           for trainer-context = (pathname-name (pathname trainer-file))
           do (progn
+               #+(or)(format t "number-of-atoms ~a node-index ~a~%" number-of-atoms node-index)
                (push trainer-context (gethash node-index node-work nil))
                (incf trainer-count)
                (when (gethash node-index node-work)
@@ -159,7 +161,7 @@
                                  (format t "~s~%" err)
                                  (let ((clasp-debug:*frame-filters* nil))
                                    (clasp-debug:print-backtrace)))))
-                     (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps))
+                     (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :build-info-msg (list :node-index node-index)))
                    (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps)))))
       (if parallel
           (lparallel:pmapc #'one-trainer node-trainers)

@@ -419,7 +419,7 @@ the focus residue.  We need these to match fragment internals with each other la
                    :out-of-focus-internals out-of-focus-internals)))
 
 
-(defun build-trainer (foldamer trainer-context &key (steps 3) (load-pathname *load-pathname*))
+(defun build-trainer (foldamer trainer-context &key (steps 3) (load-pathname *load-pathname*) build-info-msg)
   (let ((root-pathname (make-pathname :directory (butlast (pathname-directory load-pathname)))))
     (multiple-value-bind (input-file done-file sdf-file internals-file log-file svg-file)
         (calculate-files trainer-context root-pathname)
@@ -454,7 +454,7 @@ the focus residue.  We need these to match fragment internals with each other la
                   (let* ((sketch2d (sketch2d:sketch2d molecule))
                          (svg (sketch2d:svg sketch2d)))
                     (cl-svg:stream-out fout (sketch2d:render-svg-scene svg))))
-                (when (plusp (- steps total-count)) 
+                (when (plusp (- steps total-count))
                   (format flog "internals ~a~%" trainer-context)
                   (loop for count below (- steps total-count)
                         do (progn
@@ -505,7 +505,9 @@ the focus residue.  We need these to match fragment internals with each other la
                 (topology:save-fragment-conformations fragment-conformations internals-file)
                 (with-open-file (fout done-file :direction :output :if-exists :supersede)
                   (format fout "(:number-of-atoms ~a " number-of-atoms)
-                  (format fout "(:finished-steps ~a " total-count)
+                  (when build-info-msg
+                    (format fout ":build-info-msg ~s " build-info-msg))
+                  (format fout ":finished-steps ~a " total-count)
                   (let ((fragment-conformations-length (length (topology:fragments fragment-conformations))))
                     (format fout ":hits ~a " fragment-conformations-length)
                     (if (/= total-count 0)
