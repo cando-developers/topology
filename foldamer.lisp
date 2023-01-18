@@ -401,8 +401,8 @@ by 3 or fewer bonds"
                                                             (eq focus-atresidue grandparent-atresidue)
                                                             (eq focus-atresidue great-grandparent-atresidue))
                                                         (vector-push-extend (extract-one-internal joint flog) internals-vector)
-                                                        (return-from out-of-focus-internals internals-vector)))))))
-                     (setf (gethash (topology:stereoisomer-name atresidue) out-of-focus-internals) internals-vector)))))
+                                                        (return-from out-of-focus-internals internals-vector))))))
+                       (setf (gethash (topology:stereoisomer-name atresidue) out-of-focus-internals) internals-vector))))))
       out-of-focus-internals)))
 
 (defun extract-focus-atresidue-internals (focus-atresidue atmolecule total-count flog)
