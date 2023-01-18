@@ -393,13 +393,16 @@ by 3 or fewer bonds"
                                                for joint = (aref joints joint-index)
                                                do (let* ((parent (kin:get-parent joint))
                                                          (grandparent (when parent (kin:get-parent parent)))
-                                                         (great-grandparent (when grandparent (kin:get-parent grandparent))))
-                                                    (when great-grandparent
-                                                      (let ((great-grandparent-atresidue (gethash great-grandparent joint-to-atresidue)))
-                                                        (if (eq focus-atresidue great-grandparent-atresidue) ; great-grandparent joint is still in focus-atresidue
-                                                            (vector-push-extend (extract-one-internal joint flog) internals-vector)
-                                                            (return-from out-of-focus-internals internals-vector))))))))
-                       (setf (gethash (topology:stereoisomer-name atresidue) out-of-focus-internals) internals-vector))))))
+                                                         (great-grandparent (when grandparent (kin:get-parent grandparent)))
+                                                         (parent-atresidue (and parent (gethash parent joint-to-atresidue)))
+                                                         (grandparent-atresidue (and grandparent (gethash grandparent joint-to-atresidue)))
+                                                         (great-grandparent-atresidue (and great-grandparent (gethash grandparent joint-to-atresidue))))
+                                                    (if (or (eq focus-atresidue parent-atresidue)
+                                                            (eq focus-atresidue grandparent-atresidue)
+                                                            (eq focus-atresidue great-grandparent-atresidue))
+                                                        (vector-push-extend (extract-one-internal joint flog) internals-vector)
+                                                        (return-from out-of-focus-internals internals-vector)))))))
+                     (setf (gethash (topology:stereoisomer-name atresidue) out-of-focus-internals) internals-vector)))))
       out-of-focus-internals)))
 
 (defun extract-focus-atresidue-internals (focus-atresidue atmolecule total-count flog)
@@ -410,6 +413,7 @@ the focus residue.  We need these to match fragment internals with each other la
                           collect (extract-one-internal joint flog)))
          (out-of-focus-internals (out-of-focus-atresidue-internals atmolecule focus-atresidue flog)))
     (make-instance 'topology:fragment-internals
+                   :name (topology:stereoisomer-name focus-atresidue)
                    :index total-count
                    :internals internals
                    :out-of-focus-internals out-of-focus-internals)))

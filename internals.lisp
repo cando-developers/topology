@@ -60,7 +60,8 @@
              (dihedral-rad obj)))))
 
 (defclass fragment-internals ()
-  ((index :initarg :index :accessor index)
+  ((name :initarg :name :accessor name)
+   (index :initarg :index :accessor index)
    (internals :initarg :internals :accessor internals)
    (out-of-focus-internals :initarg :out-of-focus-internals :accessor out-of-focus-internals)))
 

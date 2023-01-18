@@ -60,8 +60,7 @@
 
 (defun fragments-match-p (before-fragment after-fragment)
   "Return T for the time being"
-  (declare (ignore before-fragment after-fragment))
-  t)
+  (break "Check before-fragment ~a after-fragment ~a" before-fragment after-fragment))
 
 
 (defun match-conformations (before-monomer-context before-fragment-conformations
