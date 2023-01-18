@@ -435,8 +435,7 @@ the focus residue.  We need these to match fragment internals with each other la
           (let* ((fragment-conformations (if (probe-file internals-file)
                                              (topology:load-fragment-conformations internals-file)
                                              (make-instance 'topology:fragment-conformations
-                                                            :monomer-context trainer-context)))
-                 )
+                                                            :monomer-context trainer-context))))
             (register-topologys foldamer)
             (multiple-value-bind (oligomer focus-monomer)
                 (find-oligomer-for-monomer-context foldamer trainer-context)

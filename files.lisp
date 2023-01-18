@@ -100,13 +100,18 @@
 	 (jobs-per-node (ceiling (length trainer-contexts) node-total))
          (node-work (make-hash-table :test 'eql))
          (trainer-count 0)
-         (trainers-that-need-work (loop for trainer-context in trainer-contexts
+         (unsorted-trainers-that-need-work (loop for trainer-context in trainer-contexts
                                         when (needs-work trainer-context steps)
-                                          collect trainer-context)))
-    
+                                          collect (let* ((oligomer (find-oligomer-for-monomer-context spiros trainer-context))
+                                                         (molecule (topology:build-molecule oligomer))
+                                                         (number-of-atoms (chem:number-of-atoms molecule)))
+                                                    (cons number-of-atoms trainer-context))))
+         (trainers-that-need-work (sort unsorted-trainers-that-need-work #'> :key #'car)))
     (format t "Maximum finished-steps ~a~%" max-finished-steps)
     (format t "New steps              ~a~%" steps)
-    (loop for trainer-file in trainers-that-need-work
+    (loop for pair in trainers-that-need-work
+          for number-of-atoms = (car pair)
+          for trainer-file = (cdr pair)
           for index from 0
           for node-index = (mod index node-total)
           for trainer-context = (pathname-name (pathname trainer-file))
