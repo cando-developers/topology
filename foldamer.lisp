@@ -247,16 +247,41 @@
                      do (return-from find-oligomer-for-monomer-context (values oligomer focus-monomer))))))
 
 
-(defun all-monomer-contexts-in-training-oligomer-space (training-oligomer-space)
-  "Return every monomer-context in the training-oligomer-space"
-  (let* ((oligomer-space (oligomer-space training-oligomer-space))
-         (focus-monomer (focus-monomer training-oligomer-space))
+(defun oligomer-monomer-context-focus-monomer-iterator (training-oligomer-space)
+  "Return an iterator that returns successive (values number-remaining oligomer monomer-context focus-monomer focus-monomer-name)
+   in the training-oligomer-space. When it runs out it returns nil."
+  (let* ((number-of-sequences (topology:number-of-sequences (foldamer:oligomer-space training-oligomer-space)))
+         (sequence-index 0)
+         (oligomer-space (oligomer-space training-oligomer-space))
          (monomer-context-matcher (monomer-context-matcher training-oligomer-space))
-         (num-sequences (topology:number-of-sequences oligomer-space)))
-    (loop for num-seq below num-sequences
-          for oligomer = (topology:make-oligomer oligomer-space num-seq)
-          for match = (monomer-context:match monomer-context-matcher focus-monomer oligomer)
-          collect (monomer-context:match-as-string match))))
+         (focus-monomer (focus-monomer training-oligomer-space))
+         (focus-monomer-index (position focus-monomer (topology:monomers oligomer-space))))
+    (lambda ()
+      (unless (>= sequence-index number-of-sequences)
+        (let* ((oligomer (topology:make-oligomer oligomer-space sequence-index))
+               (match (monomer-context:match monomer-context-matcher focus-monomer oligomer))
+               (monomer-context (monomer-context:match-as-string match))
+               (focus-monomer-name (topology:oligomer-monomer-name-at-index oligomer focus-monomer-index)))
+          (incf sequence-index)
+          (values (- number-of-sequences sequence-index) oligomer monomer-context focus-monomer focus-monomer-name))))))
+
+(defun foldamer-oligomer-monomer-context-focus-monomer-iterator (foldamer)
+  "Return an iterator to access all oligomers in the foldamer"
+  (let* ((remaining-training-oligomer-spaces (cdr (training-oligomer-spaces foldamer)))
+         (cur-training-oligomer-space (car (training-oligomer-spaces foldamer)))
+         (inner-iterator (oligomer-monomer-context-focus-monomer-iterator cur-training-oligomer-space)))
+    (lambda ()
+      (when inner-iterator
+        (multiple-value-bind (number-remaining oligomer monomer-context focus-monomer)
+            (funcall inner-iterator)
+          (cond
+            ((> number-remaining 0) (values t oligomer monomer-context focus-monomer))
+            ((= number-remaining 0)
+             (setf cur-training-oligomer-space (car remaining-training-oligomer-spaces)
+                   remaining-training-oligomer-spaces (cdr remaining-training-oligomer-spaces)
+                   inner-iterator (and cur-training-oligomer-space (oligomer-monomer-context-focus-monomer-iterator cur-training-oligomer-space)))
+             (values t oligomer monomer-context focus-monomer))
+            (t nil)))))))
 
 (defun calculate-files (trainer-context &optional root-pathname)
   (let* ((data-dir (if root-pathname (merge-pathnames #P"data/" root-pathname)
@@ -396,7 +421,7 @@ by 3 or fewer bonds"
                                                          (great-grandparent (when grandparent (kin:get-parent grandparent)))
                                                          (parent-atresidue (and parent (gethash parent joint-to-atresidue)))
                                                          (grandparent-atresidue (and grandparent (gethash grandparent joint-to-atresidue)))
-                                                         (great-grandparent-atresidue (and great-grandparent (gethash grandparent joint-to-atresidue))))
+                                                         (great-grandparent-atresidue (and great-grandparent (gethash great-grandparent joint-to-atresidue))))
                                                     (if (or (eq focus-atresidue parent-atresidue)
                                                             (eq focus-atresidue grandparent-atresidue)
                                                             (eq focus-atresidue great-grandparent-atresidue))
@@ -440,6 +465,7 @@ the focus residue.  We need these to match fragment internals with each other la
             (multiple-value-bind (oligomer focus-monomer)
                 (find-oligomer-for-monomer-context foldamer trainer-context)
               #+(or)(format flog "Building trainer for monomer context ~a~%" (dump-local-monomer-context focus-monomer))
+              (error "How does this work???  The focus-monomer was for the trainer-context")
               (let* ((conf (topology:make-conformation oligomer :focus-monomer focus-monomer))
                      (agg (topology:aggregate conf))
                      (molecule (cando:mol agg 0))
@@ -557,6 +583,8 @@ the focus residue.  We need these to match fragment internals with each other la
 
 (defmethod topology:foldamer-monomer-context (monomer oligomer-or-space (foldamer foldamer))
   "Return the monomer-context string for the monomer in the oligomer that is made of the foldamer"
+  (unless (find monomer (topology:monomers oligomer-or-space))
+    (error "The monomer ~a was not found in the oligomer-or-space ~a" monomer oligomer-or-space))
   (block monomer-context
     (loop for training-oligomer-space in (training-oligomer-spaces foldamer)
           for monomer-context-matcher = (monomer-context-matcher training-oligomer-space)

@@ -165,7 +165,7 @@
 
 (cando:make-class-save-load plug
  :print-unreadably
- (lambda (obj strea)
+ (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
      (format stream "~a ~a" (name obj) (atom-names obj)))))
 
@@ -342,6 +342,22 @@
           for digit in digits
           do (setf (aref (monomer-indices oligomer) monomer-index) digit))))
 
+(defun oligomer-monomer-name-for-monomer (oligomer monomer)
+  "Return the monomer name at index in the oligomer"
+  (let ((monomer-index (position monomer (monomers oligomer))))
+    (elt (monomers monomer) (elt (monomer-indices oligomer) monomer-index))))
+
+(defun oligomer-monomer-name-at-index (oligomer index)
+  "Return the monomer name at index in the oligomer"
+  (let ((monomer (elt (monomers oligomer) index)))
+    (elt (monomers monomer) (elt (monomer-indices oligomer) index))))
+
+(defun oligomer-monomer-names (oligomer)
+  "Return a list of monomer names for this oligomer"
+  (loop for index below (length (monomers oligomer))
+        for monomer across (monomers oligomer)
+        collect (elt (monomers monomer) (elt (monomer-indices oligomer) index))))
+
 (defun make-oligomer (oligomer-space &optional (index 0))
   (let ((olig (make-instance 'oligomer
                              :monomer-indices (make-array (length (monomers oligomer-space)) :element-type 'ext:byte32)
@@ -355,6 +371,28 @@
 (defmethod couplings ((obj oligomer))
   (couplings (oligomer-space obj)))
 
-
+(defun directional-coupling-iterator (oligomer)
+  "Iterate over directional couplins in oligomer and return (values coupling source-monomer-name target-monomer-name)"
+  (let ((remaining-couplings (loop for coupling across (couplings oligomer)
+                                   when (typep coupling 'directional-coupling)
+                                     collect coupling))
+        (monomer-to-index (let ((ht (make-hash-table)))
+                            (loop for monomer across (monomers oligomer)
+                                  for index from 0
+                                  do (setf (gethash monomer ht) index))
+                            ht)))
+    (lambda ()
+      (when remaining-couplings
+        (let* ((coupling (car remaining-couplings))
+               (source-monomer (source-monomer coupling))
+               (source-monomer-index (gethash source-monomer monomer-to-index))
+               (source-monomer-name (elt (monomers source-monomer)
+                                         (elt (monomer-indices oligomer) source-monomer-index)))
+               (target-monomer (target-monomer coupling))
+               (target-monomer-index (gethash target-monomer monomer-to-index))
+               (target-monomer-name (elt (monomers target-monomer)
+                                         (elt (monomer-indices oligomer) target-monomer-index))))
+          (setf remaining-couplings (cdr remaining-couplings))
+          (values coupling source-monomer-name target-monomer-name))))))
 
 

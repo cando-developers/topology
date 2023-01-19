@@ -60,6 +60,7 @@
    #:fragment-conformations
    #:fragment-internals
    #:out-of-focus-internal
+   #:out-of-focus-internals
    #:internal
    #:jump-internal
    #:bonded-internal
@@ -112,7 +113,7 @@
    #:build-all-atom-tree-external-coordinates
    #:copy-joint-positions-into-atoms
    #:copy-atom-positions-into-joints
-   
+   #:directional-coupling-iterator
 
    #:make-joint-tree
    #:joint-tree
@@ -136,11 +137,19 @@
 
    #:missing-fragment-match
    #:fragment-match-key
+   #:missing-fragment-match-key
    #:make-fragment-match-key
+   #:make-missing-fragment-match-key
    #:matched-fragment-conformations-map
    #:missing-fragment-matches
    #:fragment-matches
-   #:monomer-context-index-map))
+   #:monomer-context-index-map
+   #:oligomer-monomer-name-at-index
+   #:oligomer-monomer-name-for-monomer
+   #:directional-coupling-iterator
+   #:missing-fragment-matches-count
+   #:matched-fragment-conformations-summary
+   ))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -162,7 +171,7 @@
    #:maybe-remove-unused-trainers
    #:generate-training-oligomers
    #:find-oligomer-for-monomer-context
-   #:all-monomer-contexts-in-training-oligomer-space
+   #:oligomer-monomer-context-iterator
    #:build-trainer
    #:prepare-to-build-trainer
    #:foldamer-monomer-context

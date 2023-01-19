@@ -1,7 +1,8 @@
 (in-package :foldamer)
 
 (defun build-monomer-context-index-map (confs)
-  (let ((monomer-context-index (make-hash-table :test 'equal)))
+  (let ((monomer-context-index (make-hash-table :test 'equal))
+        (monomer-contexts-vector (make-array (hash-table-count (topology:monomer-context-to-fragment-conformations confs)))))
     (with-hash-table-iterator (my-iterator (topology:monomer-context-to-fragment-conformations confs))
       (loop
         named indexes
@@ -10,58 +11,40 @@
                (my-iterator)
              (declare (ignore value))
              (if entry-p
-                 (setf (gethash key monomer-context-index) index)
+                 (progn
+                   (setf (gethash key monomer-context-index) index)
+                   (setf (aref monomer-contexts-vector index) key))
                  (return-from indexes)))))
-    monomer-context-index))
+    (values monomer-context-index monomer-contexts-vector)))
 
-
-(defclass training-oligomer-space-pair ()
-  ((before-training-oligomer-space :initarg :before-training-oligomer-space :accessor before-training-oligomer-space)
-   (after-training-oligomer-space :initarg :after-training-oligomer-space :accessor after-training-oligomer-space)))
-
-
-(defun all-training-oligomer-space-pairs (foldamer)
-  (let ((pairs nil))
-    (loop named indexes
-          for index from 0
-          for training-oligomer-space in (training-oligomer-spaces foldamer)
-          for oligomer-space = (oligomer-space training-oligomer-space)
-          for focus-monomer = (focus-monomer training-oligomer-space)
-          for focus-monomer-id = (topology:id focus-monomer)
-          for in-coupling = (loop named find-in-coupling
-                                  for coupling across (topology:couplings oligomer-space)
-                                  when (eq (topology:target-monomer coupling) focus-monomer)
-                                    do (return-from find-in-coupling coupling))
-          when in-coupling
-            do (let* ((in-monomer (topology:source-monomer in-coupling))
-                      (in-monomer-id (topology:id in-monomer)))
-                 (declare (ignore in-monomer-id))
-                 (loop for in-training-oligomer-space in (training-oligomer-spaces foldamer)
-                       for in-oligomer-space = (oligomer-space in-training-oligomer-space)
-                       for in-focus-monomer = (focus-monomer in-training-oligomer-space)
-                       for in-focus-monomer-id = (topology:id in-focus-monomer)
-                       for out-coupling = (loop named find-out-coupling
-                                                for coupling across (topology:couplings in-oligomer-space)
-                                                for out-monomer = (topology:target-monomer coupling)
-                                                for out-monomer-id = (topology:id out-monomer)
-                                                when (and (eq (topology:id (topology:source-monomer coupling)) in-focus-monomer-id)
-                                                          (eq (topology:source-plug-name coupling) (topology:source-plug-name in-coupling))
-                                                          (eq (topology:target-plug-name coupling) (topology:target-plug-name in-coupling))
-                                                          (eq (topology:id (topology:source-monomer coupling))
-                                                              (topology:id (topology:source-monomer in-coupling)))
-                                                          (eq (topology:id (topology:target-monomer coupling))
-                                                              (topology:id (topology:target-monomer in-coupling))))
-                                                  do (let* ((pair (make-instance 'training-oligomer-space-pair
-                                                                                 :before-training-oligomer-space in-training-oligomer-space
-                                                                                 :after-training-oligomer-space training-oligomer-space)))
-                                                       (push pair pairs))))))
-    pairs))
-
+(defun angle-difference (b1 b2)
+  (let ((diff (mod (- b2 b1) 360)))
+    (if (< diff -180)
+	(incf diff 360)
+	(if (> diff 180)
+	    (decf diff 360)
+	    diff))))
 
 (defun fragments-match-p (before-fragment after-fragment)
   "Return T for the time being"
-  (break "Check before-fragment ~a after-fragment ~a" before-fragment after-fragment))
-
+  (let* ((after-fragment-name (topology:name after-fragment))
+         (before-fragment-out-of-focus (gethash after-fragment-name (topology:out-of-focus-internals before-fragment))))
+    (unless before-fragment-out-of-focus
+      (error "Could not find ~s in out-of-focus-internals of ~s"
+             after-fragment-name before-fragment))
+    (loop for index below (length before-fragment-out-of-focus)
+          for before-bonded-internal = (elt before-fragment-out-of-focus index)
+          for after-bonded-internal = (elt (topology:internals after-fragment) index)
+          do (progn
+               (unless (eq (topology:name before-bonded-internal)
+                           (topology:name after-bonded-internal))
+                 (error "Atom names don't match ~s ~s" before-bonded-internal after-bonded-internal))
+               (let* ((diha (/ (topology:dihedral before-bonded-internal) 0.0174533))
+                      (dihb (/ (topology:dihedral after-bonded-internal) 0.0174533))
+                      (delta-angle (abs (angle-difference diha dihb))))
+                 (when (> delta-angle 20.0)
+                   (return-from fragments-match-p nil)))))
+    t))
 
 (defun match-conformations (before-monomer-context before-fragment-conformations
                             after-monomer-context after-fragment-conformations
@@ -87,11 +70,11 @@
                                                                 do (return-from build-or-reuse-match previous-after-fragment-match-vector)
                                                               finally (return-from build-or-reuse-match new-after-fragment-match-vector)))
         if (= (length after-fragment-match-vector) 0)
-          do (push (make-instance 'topology:missing-fragment-match
-                                  :before-monomer-context before-monomer-context
-                                  :after-monomer-context after-monomer-context
-                                  :before-fragment-conformation-index before-fragment-index)
-                   (topology:missing-fragment-matches fragment-conformations-map))
+          do (pushnew before-fragment-index (gethash (topology:make-missing-fragment-match-key
+                                                   :before-monomer-context-index before-monomer-context-index
+                                                   :after-monomer-context-index after-monomer-context-index)
+                                                  (topology:missing-fragment-matches fragment-conformations-map)
+                                                  nil))
         else
           do (let ((fragment-match-key (topology:make-fragment-match-key
                                         :before-monomer-context-index before-monomer-context-index
@@ -101,34 +84,117 @@
                      after-fragment-match-vector)))
   fragment-conformations-map)
 
+
+(defun matching-oligomers-p (before-monomer-context before-oligomer before-focus-monomer before-focus-monomer-name
+                             after-monomer-context after-oligomer after-focus-monomer after-focus-monomer-name)
+  (declare (ignore before-monomer-context after-monomer-context))
+  (let ((after-iterator (topology:directional-coupling-iterator after-oligomer))
+        after-coupling after-source-monomer-name after-target-monomer-name
+        before-coupling before-source-monomer-name before-target-monomer-name)
+    ;; Find the in-coupling for the after-oligomer from the after-focus-monomer
+    (loop named after-loop
+          do (multiple-value-setq (after-coupling after-source-monomer-name after-target-monomer-name) (funcall after-iterator))
+          do (unless after-coupling (return-from matching-oligomers-p nil))
+          do (when (eq (topology:target-monomer after-coupling) after-focus-monomer)
+               (return-from after-loop nil)))
+    (let ((before-iterator (topology:directional-coupling-iterator before-oligomer)))
+      (loop named before-loop
+            do (multiple-value-setq (before-coupling before-source-monomer-name before-target-monomer-name) (funcall before-iterator))
+            do (unless before-coupling (return-from matching-oligomers-p nil))
+            do (when (and (eq (topology:source-monomer before-coupling) before-focus-monomer)
+                          (eq (topology:source-plug-name before-coupling) (topology:source-plug-name after-coupling)))
+                 (return-from before-loop nil)))
+      (let ((before-target-monomer-name (topology:oligomer-monomer-name-for-monomer before-oligomer (topology:target-monomer before-coupling)))
+            (after-source-monomer-name (topology:oligomer-monomer-name-for-monomer after-oligomer (topology:source-monomer after-coupling))))
+        (and (eq before-target-monomer-name after-focus-monomer-name)
+             (eq after-source-monomer-name before-focus-monomer-name))))))
+
+
+(defclass monomer-context-pair ()
+  ((before-monomer-context :initarg :before-monomer-context :accessor before-monomer-context)
+   (after-monomer-context :initarg :after-monomer-context :accessor after-monomer-context)))
+
+(defun over-matching-oligomers (before-training-oligomer-space
+                                after-training-oligomer-space)
+  (let ((before-iterator (oligomer-monomer-context-focus-monomer-iterator before-training-oligomer-space))
+        result)
+    (loop named before-loop
+          do (multiple-value-bind (number-remaining before-oligomer before-monomer-context before-focus-monomer before-focus-monomer-name)
+                 (funcall before-iterator)
+               (unless number-remaining (return-from before-loop nil))
+               (when (and number-remaining (> number-remaining 0))
+                 (let ((after-iterator (oligomer-monomer-context-focus-monomer-iterator after-training-oligomer-space)))
+                   (loop named after-loop
+                         do (multiple-value-bind (number-remaining after-oligomer after-monomer-context after-focus-monomer after-focus-monomer-name)
+                                (funcall after-iterator)
+                              (unless number-remaining (return-from after-loop nil))
+                              (when (and number-remaining (> number-remaining 0))
+                                (when (matching-oligomers-p before-monomer-context before-oligomer before-focus-monomer before-focus-monomer-name
+                                                            after-monomer-context after-oligomer after-focus-monomer after-focus-monomer-name)
+                                  (push (make-instance 'monomer-context-pair
+                                                       :before-monomer-context before-monomer-context
+                                                       :after-monomer-context after-monomer-context)
+                                        result)
+                                  #+(or)(format t "Do something with: ~a -> ~a~%" before-monomer-context after-monomer-context)))))))))
+    result))
+
+(defun all-matching-monomer-contexts (foldamer)
+  (loop named indexes
+        for index from 0
+        for training-oligomer-space in (training-oligomer-spaces foldamer)
+        for oligomer-space = (oligomer-space training-oligomer-space)
+        for focus-monomer = (focus-monomer training-oligomer-space)
+        for focus-monomer-id = (topology:id focus-monomer)
+        for in-coupling = (loop named find-in-coupling
+                                for coupling across (topology:couplings oligomer-space)
+                                when (eq (topology:target-monomer coupling) focus-monomer)
+                                  do (return-from find-in-coupling coupling))
+        when in-coupling
+          append (let* ((in-monomer (topology:source-monomer in-coupling))
+                        (in-monomer-id (topology:id in-monomer)))
+                   (declare (ignore in-monomer-id))
+                   (loop for in-training-oligomer-space in (training-oligomer-spaces foldamer)
+                         for in-oligomer-space = (oligomer-space in-training-oligomer-space)
+                         for in-focus-monomer = (focus-monomer in-training-oligomer-space)
+                         for in-focus-monomer-id = (topology:id in-focus-monomer)
+                         append (loop named find-out-coupling
+                                      for coupling across (topology:couplings in-oligomer-space)
+                                      for out-monomer = (topology:target-monomer coupling)
+                                      for out-monomer-id = (topology:id out-monomer)
+                                      when (and (eq (topology:id (topology:source-monomer coupling)) in-focus-monomer-id)
+                                                (eq (topology:source-plug-name coupling) (topology:source-plug-name in-coupling))
+                                                (eq (topology:target-plug-name coupling) (topology:target-plug-name in-coupling))
+                                                (eq (topology:id (topology:source-monomer coupling))
+                                                    (topology:id (topology:source-monomer in-coupling)))
+                                                (eq (topology:id (topology:target-monomer coupling))
+                                                    (topology:id (topology:target-monomer in-coupling))))
+                                        append (over-matching-oligomers in-training-oligomer-space
+                                                                        training-oligomer-space)
+                                      #+(or)(all-matching-momomer-contexts-in-matching-training-oligomer-space-pairs
+                                             in-training-oligomer-space
+                                             training-oligomer-space))))))
+
 (defun optimize-fragment-conformations-map (simple-fragment-conformations-map foldamer)
-  (let* ((num-pairs 0)
-         (training-oligomer-space-to-monomer-conformations (make-hash-table))
-         (monomer-context-index-map (build-monomer-context-index-map simple-fragment-conformations-map))
-         (fragment-conformations-map
-           (make-instance 'topology:matched-fragment-conformations-map
-                          :monomer-context-to-fragment-conformations
-                          (topology:monomer-context-to-fragment-conformations simple-fragment-conformations-map)
-                          :monomer-context-index-map monomer-context-index-map)))
-    (loop for training-oligomer-space in (training-oligomer-spaces foldamer)
-          for monomer-contexts = (foldamer:all-monomer-contexts-in-training-oligomer-space training-oligomer-space)
-          do (setf (gethash training-oligomer-space training-oligomer-space-to-monomer-conformations) monomer-contexts))
-    (loop for pair in (all-training-oligomer-space-pairs foldamer)
-          for before-monomer-contexts = (all-monomer-contexts-in-training-oligomer-space (before-training-oligomer-space pair))
-          for after-monomer-contexts = (all-monomer-contexts-in-training-oligomer-space (after-training-oligomer-space pair))
-          with monomer-context-to-fragment-conformations = (topology:monomer-context-to-fragment-conformations fragment-conformations-map)
-          do (loop for before-monomer-context in before-monomer-contexts
-                   for before-monomer-context-index = (gethash before-monomer-context monomer-context-index-map)
-                   for before-fragment-conformations = (gethash before-monomer-context monomer-context-to-fragment-conformations) 
-                   do (loop for after-monomer-context in after-monomer-contexts
-                            for after-monomer-context-index = (gethash after-monomer-context monomer-context-index-map)
-                            for after-fragment-conformations = (gethash after-monomer-context monomer-context-to-fragment-conformations)
-                            do (match-conformations before-monomer-context before-fragment-conformations
-                                                    after-monomer-context after-fragment-conformations
-                                                    fragment-conformations-map)
-                            do (incf num-pairs)
-                            )
-                   )
-          )
-    (values fragment-conformations-map num-pairs)
-    ))
+  (let ((all-matching-monomer-contexts (all-matching-monomer-contexts foldamer)))
+    (multiple-value-bind (monomer-context-index-map monomer-contexts-vector)
+        (build-monomer-context-index-map simple-fragment-conformations-map)
+      (let ((fragment-conformations-map
+              (make-instance 'topology:matched-fragment-conformations-map
+                             :monomer-context-to-fragment-conformations
+                             (topology:monomer-context-to-fragment-conformations simple-fragment-conformations-map)
+                             :monomer-context-index-map monomer-context-index-map
+                             :monomer-contexts-vector monomer-contexts-vector))
+            (num-pairs 0))
+        (loop for monomer-context-pair in all-matching-monomer-contexts
+              for before-monomer-context = (before-monomer-context monomer-context-pair)
+              for after-monomer-context = (after-monomer-context monomer-context-pair)
+              with monomer-context-to-fragment-conformations = (topology:monomer-context-to-fragment-conformations fragment-conformations-map)
+              for before-monomer-context-index = (gethash before-monomer-context monomer-context-index-map)
+              for before-fragment-conformations = (gethash before-monomer-context monomer-context-to-fragment-conformations) 
+              for after-monomer-context-index = (gethash after-monomer-context monomer-context-index-map)
+              for after-fragment-conformations = (gethash after-monomer-context monomer-context-to-fragment-conformations)
+              do (match-conformations before-monomer-context before-fragment-conformations
+                                      after-monomer-context after-fragment-conformations
+                                      fragment-conformations-map)
+              do (incf num-pairs))
+        (values fragment-conformations-map num-pairs)))))

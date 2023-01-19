@@ -85,23 +85,47 @@
    (print-unreadable-object (obj stream :type t))))
 
 (defclass matched-fragment-conformations-map (fragment-conformations-map)
-  ((missing-fragment-matches :initform nil
+  ((missing-fragment-matches :initform (make-hash-table :test 'equalp)
                              :initarg :missing-fragment-matches
                              :accessor missing-fragment-matches)
-   (fragment-matches :initform (make-hash-table :test 'equal)
+   (fragment-matches :initform (make-hash-table :test 'equalp)
                      :initarg :fragment-matches
                      :accessor fragment-matches)
    (monomer-context-index-map :initform (make-hash-table :test 'equal)
                      :initarg :monomer-context-index-map
                      :accessor monomer-context-index-map)
-   ))
+   (monomer-contexts-vector :initarg :monomer-contexts-vector
+                     :accessor monomer-contexts-vector)))
 
 (cando:make-class-save-load matched-fragment-conformations-map)
+
+(defun matched-fragment-conformations-summary (matched-fragment-conformations-map)
+  (let ((total-fragment-conformations 0)
+        (matching-fragment-conformations 0)
+        (missing-fragment-conformations 0))
+    (maphash (lambda (key value)
+               (declare (ignore key))
+               (incf total-fragment-conformations (length (fragments value))))
+             (monomer-context-to-fragment-conformations matched-fragment-conformations-map))
+    (maphash (lambda (key value)
+               (declare (ignore key))
+               (incf matching-fragment-conformations (length value)))
+             (fragment-matches matched-fragment-conformations-map))
+    (maphash (lambda (key value)
+               (declare (ignore key))
+               (incf missing-fragment-conformations (length value)))
+             (missing-fragment-matches matched-fragment-conformations-map))
+    (values total-fragment-conformations matching-fragment-conformations missing-fragment-conformations)))
 
 (defstruct fragment-match-key
   before-monomer-context-index
   after-monomer-context-index
   before-fragment-conformation-index)
+
+(defstruct missing-fragment-match-key
+  before-monomer-context-index
+  after-monomer-context-index
+  )
 
 (defstruct missing-fragment-match
   before-monomer-context
