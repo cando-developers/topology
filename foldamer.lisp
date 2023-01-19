@@ -465,7 +465,6 @@ the focus residue.  We need these to match fragment internals with each other la
             (multiple-value-bind (oligomer focus-monomer)
                 (find-oligomer-for-monomer-context foldamer trainer-context)
               #+(or)(format flog "Building trainer for monomer context ~a~%" (dump-local-monomer-context focus-monomer))
-              (error "How does this work???  The focus-monomer was for the trainer-context")
               (let* ((conf (topology:make-conformation oligomer :focus-monomer focus-monomer))
                      (agg (topology:aggregate conf))
                      (molecule (cando:mol agg 0))
