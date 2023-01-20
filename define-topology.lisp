@@ -257,9 +257,15 @@ So if name is \"ALA\" and stereoisomer-index is 1 the name becomes ALA{CA/S}."
                        :stereoisomer-index 0
                        :configurations nil))))
 
+(defclass stereocenter-info ()
+  ((name :initarg :name :accessor name)
+   (type :initarg :type :accessor type)))
+
 (defun build-stereo-information (name chiral-constitution-atoms)
   "Build stereoinformation from all of this and return it."
-  (let* ((chiral-atoms chiral-constitution-atoms)
+  (let* ((chiral-atoms (loop for info in chiral-constitution-atoms
+                             when (eq (type info) :chiral)
+                               collect (name info)))
          (number-of-chiral-atoms (length chiral-atoms))
          (number-of-stereoisomers (expt 2 number-of-chiral-atoms)))
     #+(or)
@@ -271,8 +277,11 @@ So if name is \"ALA\" and stereoisomer-index is 1 the name becomes ALA{CA/S}."
       (terpri))
     (let ((stereoisomers (loop for stereoisomer-index below number-of-stereoisomers
                                for stereoisomer = (build-stereoisomer name chiral-atoms stereoisomer-index)
-                               collect stereoisomer)))
-      stereoisomers)))
+                               collect stereoisomer))
+          (prochiral-centers (loop for info in chiral-constitution-atoms
+                                   when (not (eq (type info)))
+                                     collect info)))
+      (values stereoisomers prochiral-centers))))
 
 (defun constitution-atoms-from-graph (graph)
   (let ((constitution-atoms (make-array (hash-table-count (nodes graph)))))
@@ -324,15 +333,24 @@ So if name is \"ALA\" and stereoisomer-index is 1 the name becomes ALA{CA/S}."
                                   for ca = (elt constitution-atoms index)
                                   for prop-list = (properties ca)
                                   for stereochemistry-type = (stereochemistry-type ca)
-                                  when (eq :chiral stereochemistry-type)
-                                    collect ca))
-             (stereo-information (build-stereo-information (name graph) stereocenters)))
-        (values constitution-atoms plugs stereo-information)))))
+                                  when (or (eq :chiral stereochemistry-type)
+                                           (eq :prochiral-left stereochemistry-type)
+                                           (eq :prochiral-right stereochemistry-type)
+                                           (eq :undefined-center stereochemistry-type)
+                                           (error "Uknown stereochemistry-type ~a - must be :chiral, :prochiral-left, :prochiral-right" stereochemistry-type))
+                                    collect (make-instance 'stereocenter-info
+                                                           :name ca
+                                                           :type stereochemistry-type))))
+        (multiple-value-bind (stereo-information prochiral-centers)
+            (build-stereo-information (name graph) stereocenters)
+          (values constitution-atoms plugs stereo-information prochiral-centers))))))
 
 
 (defun constitution-from-graph (graph)
-  (multiple-value-bind (constitution-atoms plugs stereo-information)
+  (multiple-value-bind (constitution-atoms plugs stereo-information prochiral-info)
       (constitution-atoms-from-graph graph)
+    (when prochiral-info
+      (error "Handle prochiral-info ~a" prochiral-info))
     (make-instance 'constitution
                    :name (name graph)
                    :constitution-atoms constitution-atoms

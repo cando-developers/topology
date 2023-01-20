@@ -33,6 +33,13 @@
           for stereochemistry-type = :chiral
           do (chem:set-stereochemistry-type atm stereochemistry-type)
           do (chem:set-configuration atm (configuration stereoisomer-atom)))
+    ;; assign stereochem for prochiral atoms so they aren't random
+    (cando:do-atoms (atm residue)
+      (when (= (chem:number-of-bonds atm) 4)
+        (chem:set-hybridization atm :sp3)
+        (when (not (eq (chem:get-stereochemistry-type atm) :chiral))
+          (chem:set-stereochemistry-type atm :prochiral)
+          (chem:set-configuration atm :left-handed))))
     (loop for restraint in (restraints topology)
           for rr = (etypecase restraint
                      (dihedral-restraint
