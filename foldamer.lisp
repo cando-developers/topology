@@ -563,6 +563,46 @@ the focus residue.  We need these to match fragment internals with each other la
     fragment-conformations-map))
 
 
+(defun check-fragment-conformations-map (filename)
+  (let* ((foldamer-filename (merge-pathnames #P"foldamer.dat" filename))
+         (foldamer (cando:load-cando foldamer-filename))
+         (fragment-conformations-map (make-instance 'topology:fragment-conformations-map))
+	 (left-count 0)
+	 (right-count 0))
+    (loop for trainer-name in (valid-trainer-contexts foldamer)
+	  do (multiple-value-bind (input-file done-file sdf-file internals-file)
+				  (calculate-files trainer-name filename)
+				  (declare (ignore input-file done-file sdf-file))
+				  (if (probe-file internals-file)
+				      (let ((fragment-conformations (topology:load-fragment-conformations internals-file)))
+					(loop for fragment-internals in (topology:fragments fragment-conformations)
+					      for internals = (topology:internals fragment-internals)
+					      for internal0 = (first internals)
+					      when (eq (topology:name internal0) :cm)
+					      do (let* ((j1 (second internals))
+							(j2 (third internals))
+							(j3 (fourth internals))
+							(d1 (/ (topology:dihedral j1) 0.0174533))
+							(d2 (/ (topology:dihedral j2) 0.0174533))
+							(d3 (/ (topology:dihedral j3) 0.0174533))
+							(ad12 (foldamer::angle-difference d1 d2))
+							(ad23 (foldamer::angle-difference d2 d3))
+							(ad31 (foldamer::angle-difference d3 d1)))
+						   (if (> ad12 0)
+						       (incf right-count)
+						     (incf left-count))
+						   (format t "~a ->  cm ~a ~a ~a : ~6,1f ~6,1f ~6,1f~%"
+							   trainer-name
+							   (topology:name j1)
+							   (topology:name j2)
+							   (topology:name j3)
+							   ad12
+							   ad23
+							   ad31)))))))
+    (format t " Left turning count: ~a~%" left-count)
+    (format t "Right turning count: ~a~%" right-count)))
+
+
 (defun recursive-dump-local-monomer-context (monomer prev-monomer depth)
   (when (>= depth 0)
     (let (rest)

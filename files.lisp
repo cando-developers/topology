@@ -37,7 +37,7 @@
 
 (defun needs-extract-conformations (path spiros)
   (let ((valid-trainer-contexts (foldamer:valid-trainer-contexts spiros))
-        (conformations-pathname (merge-pathnames *conformations-filename* path)))
+        (conformations-pathname  path))
     (if (null (probe-file conformations-pathname))
         t ;; Need to update conformations if file doesn't exist
         (let ((latest-done-file-write-date 0)
@@ -81,31 +81,31 @@
     ))
 			      
 (defun foldamer-setup (spiros
-                         &key
-			 (nodes 12)
-                         (clasp "$CLASP -l code.lisp")
-                         (script "jobs.dat")
-                         (finished-steps 2 finished-steps-p)
-                         (advance-steps 10 advance-steps-p))
+		       &key
+		       (nodes 12)
+		       (clasp "$CLASP -l code.lisp")
+		       (script "jobs.dat")
+		       (finished-steps 2 finished-steps-p)
+		       (advance-steps 10 advance-steps-p))
   (foldamer-update-trainers spiros :remove-unused t)
   (let* ((max-finished-steps (max-finished-steps spiros))
          (steps (cond
-                  ((and (null advance-steps-p) finished-steps-p) finished-steps)
-                  ((and (null finished-steps-p) advance-steps-p) (+ max-finished-steps advance-steps))
-                  ((and (null finished-steps-p) (null advance-steps-p))
-                   max-finished-steps)
-                  (t (error "You must provide only one option advance-steps or finished-steps or neither"))))
+		 ((and (null advance-steps-p) finished-steps-p) finished-steps)
+		 ((and (null finished-steps-p) advance-steps-p) (+ max-finished-steps advance-steps))
+		 ((and (null finished-steps-p) (null advance-steps-p))
+		  max-finished-steps)
+		 (t (error "You must provide only one option advance-steps or finished-steps or neither"))))
          (trainer-contexts (foldamer:valid-trainer-contexts spiros))
          (node-total nodes)
 	 (jobs-per-node (ceiling (length trainer-contexts) node-total))
          (node-work (make-hash-table :test 'eql))
          (trainer-count 0)
          (unsorted-trainers-that-need-work (loop for trainer-context in trainer-contexts
-                                        when (needs-work trainer-context steps)
-                                          collect (let* ((oligomer (find-oligomer-for-monomer-context spiros trainer-context))
-                                                         (molecule (topology:build-molecule oligomer))
-                                                         (number-of-atoms (chem:number-of-atoms molecule)))
-                                                    (cons number-of-atoms trainer-context))))
+						 when (needs-work trainer-context steps)
+						 collect (let* ((oligomer (find-oligomer-for-monomer-context spiros trainer-context))
+								(molecule (topology:build-molecule oligomer))
+								(number-of-atoms (chem:number-of-atoms molecule)))
+							   (cons number-of-atoms trainer-context))))
          (trainers-that-need-work (sort unsorted-trainers-that-need-work #'< :key #'car)))
     ;; Note: Sort order is reverse of what we want because below we push the trainer-context into list
     (format t "Maximum finished-steps ~a~%" max-finished-steps)
@@ -123,24 +123,32 @@
                (when (gethash node-index node-work)
                  #+(or)(format t "~a ~a~%" node-index trainer-context))))
     (with-open-file (fout script :direction :output :if-exists :supersede)
-      (loop for node-index below (min jobs-per-node (hash-table-count node-work))
-            do (format fout "~a -e \"(foldamer:foldamer-run-node ~a :steps ~a)\"~%"
-                       clasp
-                       node-index
-                       steps)))
+		    (loop for node-index below (min jobs-per-node (hash-table-count node-work))
+			  do (format fout "~a -e \"(foldamer:foldamer-run-node ~a :steps ~a)\"~%"
+				     clasp
+				     node-index
+				     steps)))
     (cando:save-cando node-work "node-work.cando")
     (format t "~a trainers need to be trained~%" (if (= trainer-count 0) "No" trainer-count))
-    (when (= trainer-count 0)
-      (if (needs-extract-conformations #P"./" spiros)
-          (format t "Needs foldamer-extract-conformations~%")
-          (format t "Ready to build spiroligomers~%"))))
+    )
   (sys:quit))
 
 
-(defun foldamer-extract-conformations (&optional (path #P"./"))
+(defun foldamer-extract-conformations (&optional (path #P"./") spiros)
+  (format t "Extracting conformations~%")
   (let ((foldamer-conformations-map (foldamer::assemble-fragment-conformations-map path)))
-    (format t "Saving ~a~%" *conformations-filename*)
-    (cando:save-cando foldamer-conformations-map *conformations-filename*)))
+    (format t "Matching fragment conformations~%")
+    (let ((matched (foldamer::optimize-fragment-conformations-map foldamer-conformations-map spiros)))
+      (format t "Report ~a~%" (multiple-value-list (topology:matched-fragment-conformations-summary matched)))
+      (format t "Saving ~a~%" path)
+      (cando:save-cando matched path)
+      )))
+
+
+(defun foldamer-check-conformations (&optional (path #P"./") spiros)
+  (format t "checking conformations~%")
+  (let ((foldamer-conformations-map (foldamer::check-fragment-conformations-map path)))
+    ))
 
 
 (defun foldamer-run-node (node-index &key (steps 2) testing (parallel t) (no-fail t))
