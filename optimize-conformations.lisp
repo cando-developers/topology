@@ -47,7 +47,7 @@
 
 (defun match-conformations (before-monomer-context before-fragment-conformations
                             after-monomer-context after-fragment-conformations
-                            fragment-conformations-map)
+                            fragment-conformations-map verbose)
   (loop with before-monomer-context-index = (gethash before-monomer-context (topology:monomer-context-index-map fragment-conformations-map))
         with after-monomer-context-index = (gethash after-monomer-context (topology:monomer-context-index-map fragment-conformations-map))
         with before-fragments = (topology:fragments before-fragment-conformations)
@@ -69,7 +69,7 @@
                                                               when (equalp previous-after-fragment-match-vector new-after-fragment-match-vector)
                                                                 do (return-from build-or-reuse-match previous-after-fragment-match-vector)
                                                               finally (return-from build-or-reuse-match new-after-fragment-match-vector)))
-        do (when (= (length after-fragment-match-vector) 0)
+        do (when (and verbose (= (length after-fragment-match-vector) 0))
              (format t "Empty after-fragment-match-vector for ~a -> ~a : ~a~%" before-monomer-context after-monomer-context before-fragment-index)
              (let* ((fragment (elt (topology:fragments before-fragment-conformations) before-fragment-index))
                     (out-of-focus-internals (gethash after-fragment-focus-monomer-name (topology:out-of-focus-internals fragment))))
@@ -191,7 +191,7 @@
                                              in-training-oligomer-space
                                              training-oligomer-space))))))
 
-(defun optimize-fragment-conformations-map (simple-fragment-conformations-map foldamer)
+(defun optimize-fragment-conformations-map (simple-fragment-conformations-map foldamer verbose)
   (let ((all-matching-monomer-contexts (all-matching-monomer-contexts foldamer)))
     (multiple-value-bind (monomer-context-index-map monomer-contexts-vector)
         (build-monomer-context-index-map simple-fragment-conformations-map)
@@ -212,7 +212,7 @@
               for after-fragment-conformations = (gethash after-monomer-context monomer-context-to-fragment-conformations)
               do (match-conformations before-monomer-context before-fragment-conformations
                                       after-monomer-context after-fragment-conformations
-                                      fragment-conformations-map)
+                                      fragment-conformations-map verbose)
               do (incf num-pairs))
         (values fragment-conformations-map num-pairs)))))
 

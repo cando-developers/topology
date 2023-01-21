@@ -134,11 +134,11 @@
   (sys:quit))
 
 
-(defun foldamer-extract-conformations (&optional (path #P"./") spiros)
+(defun foldamer-extract-conformations (&key (path #P"./") spiros verbose)
   (format t "Extracting conformations~%")
   (let ((foldamer-conformations-map (foldamer::assemble-fragment-conformations-map path)))
     (format t "Matching fragment conformations~%")
-    (let ((matched (foldamer::optimize-fragment-conformations-map foldamer-conformations-map spiros)))
+    (let ((matched (foldamer::optimize-fragment-conformations-map foldamer-conformations-map spiros verbose)))
       (format t "Report ~a~%" (multiple-value-list (topology:matched-fragment-conformations-summary matched)))
       (format t "Saving ~a~%" path)
       (cando:save-cando matched path)
@@ -172,7 +172,7 @@
                      (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :build-info-msg (list :node-index node-index)))
                    (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps)))))
       (if parallel
-          (lparallel:pmapc #'one-trainer node-trainers)
+          (lparallel:pmapc #'one-trainer :parts (length node-trainers) node-trainers)
           (mapc #'one-trainer node-trainers))))
   (unless testing (sys:quit)))
 
