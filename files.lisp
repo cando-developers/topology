@@ -1,6 +1,7 @@
 (in-package :foldamer)
 
 
+
 (defun done-data (trainer-context)
   (multiple-value-bind (input-file done-file)
     (foldamer:calculate-files trainer-context)
@@ -79,7 +80,20 @@
 	      number-of-trainers-with-max-finished-steps))
     (format t "Number of trainers ~a~%" (length trainer-contexts))
     ))
-			      
+
+(defclass trainer-job ()
+  ((trainer-context :initarg :trainer-context :reader trainer-context)
+   (number-of-atoms :initarg :number-of-atoms :reader number-of-atoms)
+   (node-index :initarg :node-index :reader node-index)
+   ))
+
+(cando:make-class-save-load
+ trainer-job
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a ~a" (trainer-context obj) (number-of-atoms obj)))))
+
 (defun foldamer-setup (spiros
 		       &key
 		       (nodes 12)
@@ -118,7 +132,12 @@
           for trainer-context = (pathname-name (pathname trainer-file))
           do (progn
                #+(or)(format t "number-of-atoms ~a node-index ~a~%" number-of-atoms node-index)
-               (push trainer-context (gethash node-index node-work nil))
+               (let ((trainer-job (make-instance 'trainer-job
+                                                 :trainer-context trainer-context
+                                                 :number-of-atoms number-of-atoms
+                                                 :node-index node-index)))
+                 (push trainer-job (gethash node-index node-work nil))
+                 (format t "trainer-job ~a~%" trainer-job))
                (incf trainer-count)
                (when (gethash node-index node-work)
                  #+(or)(format t "~a ~a~%" node-index trainer-context))))
@@ -150,6 +169,15 @@
   (let ((foldamer-conformations-map (foldamer::check-fragment-conformations-map path)))
     ))
 
+(defun parallel-map (fn jobs)
+  (let* ((channel (lparallel:make-channel))
+         (tasks (loop for job in jobs
+                      collect (lparallel:submit-task channel
+                                                     (let ((*job* job))
+                                                      (lambda ()
+                                                        (funcall fn *job*)))))))
+    (loop for task in tasks
+          do (lparallel:receive-result channel))))
 
 (defun foldamer-run-node (node-index &key (steps 2) testing (parallel t) (no-fail t))
   (format t "Loading force-field~%")
@@ -158,21 +186,28 @@
          (node-trainers (gethash node-index all-node-work))
          (foldamer-dat-pathname (merge-pathnames #P"./foldamer.dat"))
          (foldamer (cando:load-cando foldamer-dat-pathname)))
-    (flet ((one-trainer (trainer-context)
-             (let ((input-file (merge-pathnames (make-pathname :directory '(:relative "data")
-                                                               :name trainer-context
-                                                               :type "input"))))
-               (format t "About to build-trainer: ~a ~a~%" trainer-context (probe-file input-file))
-               (if no-fail
-                   (handler-bind
-                       ((error (lambda (err)
-                                 (format t "~s~%" err)
-                                 (let ((clasp-debug:*frame-filters* nil))
-                                   (clasp-debug:print-backtrace)))))
-                     (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :build-info-msg (list :node-index node-index)))
-                   (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps)))))
+    (flet ((one-trainer (trainer-job node-index)
+             (let* ((trainer-context (trainer-context trainer-job))
+                    (input-file (merge-pathnames (make-pathname :directory '(:relative "data")
+                                                                :name trainer-context
+                                                                :type "input")))
+                    (worker-index (lparallel:kernel-worker-index))
+                    (worker-log-name (make-pathname :name (format nil "worker-~2,'0d-~2,'0d" node-index worker-index)
+                                                    :directory (list :relative "worker-logs"))))
+               (ensure-directories-exist worker-log-name)
+               (with-open-file (worker-log worker-log-name :direction :output :if-exists :append :if-does-not-exist :create)
+                 (let ((*standard-output* worker-log))
+                   (format t "About to build-trainer: ~a~%" trainer-job)
+                   (if no-fail
+                       (handler-bind
+                           ((error (lambda (err)
+                                     (format t "~s~%" err)
+                                     (let ((clasp-debug:*frame-filters* nil))
+                                       (clasp-debug:print-backtrace)))))
+                         (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :build-info-msg (list :node-index node-index :verbose nil)))
+                       (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :verbose nil)))))))
       (if parallel
-          (lparallel:pmapc #'one-trainer :parts (length node-trainers) node-trainers)
-          (mapc #'one-trainer node-trainers))))
+          (parallel-map (lambda (trainer) (one-trainer trainer node-index)) node-trainers)
+          (mapc (lambda (trainer) (one-trainer trainer node-index)) node-trainers))))
   (unless testing (sys:quit)))
 

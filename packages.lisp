@@ -193,4 +193,6 @@
    #:foldamer-extract-conformations
    #:foldamer-run-node
 
-   ))
+   #:trainer-context
+   #:trainer-job
+   #:node-index))

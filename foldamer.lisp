@@ -443,7 +443,7 @@ the focus residue.  We need these to match fragment internals with each other la
                    :out-of-focus-internals out-of-focus-internals)))
 
 
-(defun build-trainer (foldamer trainer-context &key (steps 3) (load-pathname *load-pathname*) build-info-msg)
+(defun build-trainer (foldamer trainer-context &key (steps 3) (load-pathname *load-pathname*) build-info-msg verbose)
   (let ((root-pathname (make-pathname :directory (butlast (pathname-directory load-pathname)))))
     (multiple-value-bind (input-file done-file sdf-file internals-file log-file svg-file)
         (calculate-files trainer-context root-pathname)
@@ -490,6 +490,7 @@ the focus residue.  We need these to match fragment internals with each other la
                                                                                                 :type "cando"
                                                                                                 :defaults flog)))
                                                               (format flog "build-trainer - the minimizer reported: ~a - writing to ~a~%" err save-filename)
+                                                              (when verbose (format t "Encountered a minimizer error: ~a~%" err))
                                                               (invoke-restart 'cando:save-and-skip-rest-of-minimization save-filename)
                                                               (return-from once nil))))
                                     (smirnoff:missing-dihedral (lambda (err)
@@ -498,7 +499,7 @@ the focus residue.  We need these to match fragment internals with each other la
                                                                    (cando:save-cando (smirnoff:molecule err) save-filename))
                                                                  (signal err))))
                                  (progn
-                                   (cando:starting-geometry-with-restarts agg)))
+                                   (cando:starting-geometry-with-restarts agg :verbose verbose)))
                                (format flog "Found a starting geometry for total-count: ~a~%" total-count)
                                (sdf:write-sdf-stream agg fsdf)
                                (let ((maybe-bad-geometry (topology:bad-geometry-p agg)))
