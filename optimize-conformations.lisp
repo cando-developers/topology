@@ -27,11 +27,10 @@
 
 (defun fragments-match-p (before-fragment after-fragment after-fragment-focus-monomer-name)
   "Return T for the time being"
-  (let* ((after-fragment-name (topology:name after-fragment))
-         (before-fragment-out-of-focus (gethash after-fragment-name (topology:out-of-focus-internals before-fragment))))
+  (let ((before-fragment-out-of-focus (gethash after-fragment-focus-monomer-name (topology:out-of-focus-internals before-fragment))))
     (unless before-fragment-out-of-focus
       (error "Could not find ~s in out-of-focus-internals of ~s"
-             after-fragment-name before-fragment))
+             after-fragment-focus-monomer-name before-fragment))
     (loop for index below (length before-fragment-out-of-focus)
           for before-bonded-internal = (elt before-fragment-out-of-focus index)
           for after-bonded-internal = (elt (topology:internals after-fragment) index)
@@ -54,11 +53,11 @@
         with before-fragments = (topology:fragments before-fragment-conformations)
         with after-fragments =  (topology:fragments after-fragment-conformations)
         with before-fragment-match-table = (make-array (length before-fragments))
+        with after-fragment-focus-monomer-name = (topology:focus-monomer-name after-fragment-conformations)
         for before-fragment in before-fragments
         for before-fragment-index from 0
         for after-fragment-match-vector = (loop named build-or-reuse-match
                                                 with new-after-fragment-match-vector = (make-array 16 :element-type 'fixnum :adjustable t :fill-pointer 0)
-						with after-fragment-focus-monomer-name = (topology:focus-monomer-name after-fragment-conformations)
                                                 for after-fragment in after-fragments
                                                 for after-fragment-index from 0
                                                 for match = (fragments-match-p before-fragment after-fragment after-fragment-focus-monomer-name)
@@ -70,6 +69,23 @@
                                                               when (equalp previous-after-fragment-match-vector new-after-fragment-match-vector)
                                                                 do (return-from build-or-reuse-match previous-after-fragment-match-vector)
                                                               finally (return-from build-or-reuse-match new-after-fragment-match-vector)))
+        do (when (= (length after-fragment-match-vector) 0)
+             (format t "Empty after-fragment-match-vector for ~a -> ~a : ~a~%" before-monomer-context after-monomer-context before-fragment-index)
+             (let* ((fragment (elt (topology:fragments before-fragment-conformations) before-fragment-index))
+                    (out-of-focus-internals (gethash after-fragment-focus-monomer-name (topology:out-of-focus-internals fragment))))
+               (format t "~14a~{(~{~3a ~7,1f~})~}~%"
+                       "Before"
+                       (loop for internal across out-of-focus-internals
+                             collect (list (topology:name internal) (/ (topology:dihedral internal) 0.0174533))))
+               (loop for index below (length (topology:fragments after-fragment-conformations))
+                     for after-fragment = (elt (topology:fragments after-fragment-conformations) index)
+                     do (format t "~10a~4a~{(~{~3a ~7,1f~})~}~%"
+                                "After" (format nil "~-4d" index)
+                                (loop for ii below 5
+                                      for internal = (elt (topology:internals after-fragment) ii)
+                                      collect (list (topology:name internal) (/ (topology:dihedral internal) 0.0174533)))))
+               #+(or)(break "out-of-focus-internals ~a" out-of-focus-internals)
+               ))
         if (= (length after-fragment-match-vector) 0)
           do (pushnew before-fragment-index (gethash (topology:make-missing-fragment-match-key
                                                       :before-monomer-context-index before-monomer-context-index
