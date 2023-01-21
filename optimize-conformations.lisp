@@ -25,9 +25,8 @@
 	    (decf diff 360)
 	    diff))))
 
-(defun fragments-match-p (before-fragment after-fragment)
+(defun fragments-match-p (before-fragment after-fragment after-fragment-focus-monomer-name)
   "Return T for the time being"
-  (break "check ~a ~a" before-fragment after-fragment)
   (let* ((after-fragment-name (topology:name after-fragment))
          (before-fragment-out-of-focus (gethash after-fragment-name (topology:out-of-focus-internals before-fragment))))
     (unless before-fragment-out-of-focus
@@ -59,9 +58,10 @@
         for before-fragment-index from 0
         for after-fragment-match-vector = (loop named build-or-reuse-match
                                                 with new-after-fragment-match-vector = (make-array 16 :element-type 'fixnum :adjustable t :fill-pointer 0)
+						with after-fragment-focus-monomer-name = (topology:focus-monomer-name after-fragment-conformations)
                                                 for after-fragment in after-fragments
                                                 for after-fragment-index from 0
-                                                for match = (fragments-match-p before-fragment after-fragment)
+                                                for match = (fragments-match-p before-fragment after-fragment after-fragment-focus-monomer-name)
                                                 when match
                                                   do (vector-push-extend after-fragment-index new-after-fragment-match-vector)
                                                 finally (loop named reuse-results
