@@ -27,6 +27,7 @@
 
 (defun fragments-match-p (before-fragment after-fragment)
   "Return T for the time being"
+  (break "check ~a ~a" before-fragment after-fragment)
   (let* ((after-fragment-name (topology:name after-fragment))
          (before-fragment-out-of-focus (gethash after-fragment-name (topology:out-of-focus-internals before-fragment))))
     (unless before-fragment-out-of-focus
@@ -71,10 +72,10 @@
                                                               finally (return-from build-or-reuse-match new-after-fragment-match-vector)))
         if (= (length after-fragment-match-vector) 0)
           do (pushnew before-fragment-index (gethash (topology:make-missing-fragment-match-key
-                                                   :before-monomer-context-index before-monomer-context-index
-                                                   :after-monomer-context-index after-monomer-context-index)
-                                                  (topology:missing-fragment-matches fragment-conformations-map)
-                                                  nil))
+                                                      :before-monomer-context-index before-monomer-context-index
+                                                      :after-monomer-context-index after-monomer-context-index)
+                                                     (topology:missing-fragment-matches fragment-conformations-map)
+                                                     nil))
         else
           do (let ((fragment-match-key (topology:make-fragment-match-key
                                         :before-monomer-context-index before-monomer-context-index
@@ -198,3 +199,26 @@
                                       fragment-conformations-map)
               do (incf num-pairs))
         (values fragment-conformations-map num-pairs)))))
+
+
+
+
+
+(defun analyze-missing-conformations (confs)
+  (let ((*print-pretty* nil))
+    (maphash (lambda (key value)
+               (let* ((before-monomer-context-index (topology:missing-fragment-match-key-before-monomer-context-index key))
+                      (after-monomer-context-index (topology:missing-fragment-match-key-after-monomer-context-index key))
+                      (before-monomer-context (elt (topology:monomer-contexts-vector confs) before-monomer-context-index))
+                      (after-monomer-context (elt (topology:monomer-contexts-vector confs) after-monomer-context-index))
+                      (before-fragment (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations confs)))
+                      (after-fragment (gethash after-monomer-context (topology:monomer-context-to-fragment-conformations confs))))
+                 (format t "~a -> ~a : ~s~%" before-monomer-context after-monomer-context value)
+                 (loop for internals-index in value
+                       for fragment = (elt (topology:fragments before-fragment) internals-index)
+                       do (format t "~a~%" (topology:out-of-focus-internals fragment))
+                       do (break "examine ~a ~a" fragment after-fragment)
+                       )
+                 ))
+             (topology:missing-fragment-matches confs))))
+

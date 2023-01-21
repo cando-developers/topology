@@ -149,6 +149,14 @@
    #:directional-coupling-iterator
    #:missing-fragment-matches-count
    #:matched-fragment-conformations-summary
+
+   #:fragment-match-key-before-monomer-context-index
+   #:fragment-match-key-after-monomer-context-index
+   #:missing-fragment-match-key-before-monomer-context-index
+   #:missing-fragment-match-key-after-monomer-context-index
+   #:monomer-contexts-vector
+   #:focus-monomer-name
+   
    ))
 
 (defpackage #:monomer-context

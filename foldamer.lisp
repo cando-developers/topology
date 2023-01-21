@@ -438,7 +438,6 @@ the focus residue.  We need these to match fragment internals with each other la
                           collect (extract-one-internal joint flog)))
          (out-of-focus-internals (out-of-focus-atresidue-internals atmolecule focus-atresidue flog)))
     (make-instance 'topology:fragment-internals
-                   :name (topology:stereoisomer-name focus-atresidue)
                    :index total-count
                    :internals internals
                    :out-of-focus-internals out-of-focus-internals)))
@@ -457,13 +456,14 @@ the focus residue.  We need these to match fragment internals with each other la
                                        :if-exists :append
                                        :if-does-not-exist :create)
           (ensure-directories-exist log-file)
-          (let* ((fragment-conformations (if (probe-file internals-file)
-                                             (topology:load-fragment-conformations internals-file)
-                                             (make-instance 'topology:fragment-conformations
-                                                            :monomer-context trainer-context))))
-            (register-topologys foldamer)
-            (multiple-value-bind (oligomer focus-monomer)
-                (find-oligomer-for-monomer-context foldamer trainer-context)
+          (multiple-value-bind (oligomer focus-monomer)
+              (find-oligomer-for-monomer-context foldamer trainer-context)
+            (let* ((fragment-conformations (if (probe-file internals-file)
+                                               (topology:load-fragment-conformations internals-file)
+                                               (make-instance 'topology:fragment-conformations
+                                                              :focus-monomer-name (topology:current-stereoisomer-name focus-monomer oligomer)
+                                                              :monomer-context trainer-context))))
+              (register-topologys foldamer)
               #+(or)(format flog "Building trainer for monomer context ~a~%" (dump-local-monomer-context focus-monomer))
               (let* ((conf (topology:make-conformation oligomer :focus-monomer focus-monomer))
                      (agg (topology:aggregate conf))

@@ -60,15 +60,15 @@
              (dihedral-rad obj)))))
 
 (defclass fragment-internals ()
-  ((name :initarg :name :accessor name)
-   (index :initarg :index :accessor index)
+  ((index :initarg :index :accessor index)
    (internals :initarg :internals :accessor internals)
    (out-of-focus-internals :initarg :out-of-focus-internals :accessor out-of-focus-internals)))
 
 (cando:make-class-save-load fragment-internals)
 
 (defclass fragment-conformations ()
-  ((monomer-context :initarg :monomer-context :accessor monomer-context)
+  ((focus-monomer-name :initarg :focus-monomer-name :accessor focus-monomer-name)
+   (monomer-context :initarg :monomer-context :accessor monomer-context)
    (total-count :initform 0 :initarg :total-count :accessor total-count)
    (fragments :initform nil :initarg :fragments :accessor fragments)))
 
