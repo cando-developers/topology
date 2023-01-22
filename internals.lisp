@@ -70,7 +70,7 @@
   ((focus-monomer-name :initarg :focus-monomer-name :accessor focus-monomer-name)
    (monomer-context :initarg :monomer-context :accessor monomer-context)
    (total-count :initform 0 :initarg :total-count :accessor total-count)
-   (fragments :initform nil :initarg :fragments :accessor fragments)))
+   (fragments :initform (make-array 16 :adjustable t :fill-pointer 0) :initarg :fragments :accessor fragments)))
 
 (cando:make-class-save-load fragment-conformations)
 
@@ -140,7 +140,7 @@
   t)
 
 (defun seen-fragment-internals (fragment-conformations fragment-internals)
-  (loop for seen-frag in (fragments fragment-conformations)
+  (loop for seen-frag across (fragments fragment-conformations)
         when (similar-internals-p seen-frag fragment-internals)
           do (return-from seen-fragment-internals (index seen-frag)))
   nil)
