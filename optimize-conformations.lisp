@@ -54,11 +54,11 @@
         with after-fragments =  (topology:fragments after-fragment-conformations)
         with before-fragment-match-table = (make-array (length before-fragments))
         with after-fragment-focus-monomer-name = (topology:focus-monomer-name after-fragment-conformations)
-        for before-fragment in before-fragments
+        for before-fragment across before-fragments
         for before-fragment-index from 0
         for after-fragment-match-vector = (loop named build-or-reuse-match
                                                 with new-after-fragment-match-vector = (make-array 16 :element-type 'fixnum :adjustable t :fill-pointer 0)
-                                                for after-fragment in after-fragments
+                                                for after-fragment across after-fragments
                                                 for after-fragment-index from 0
                                                 for match = (fragments-match-p before-fragment after-fragment after-fragment-focus-monomer-name)
                                                 when match
