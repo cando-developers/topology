@@ -87,7 +87,7 @@
                #+(or)(break "out-of-focus-internals ~a" out-of-focus-internals)
                ))
         if (= (length after-fragment-match-vector) 0)
-          do (pushnew before-fragment-index (gethash (topology:make-missing-fragment-match-key
+          do (pushnew before-fragment-index (gethash (topology:make-fragment-match-key
                                                       :before-monomer-context-index before-monomer-context-index
                                                       :after-monomer-context-index after-monomer-context-index)
                                                      (topology:missing-fragment-matches fragment-conformations-map)
@@ -95,10 +95,16 @@
         else
           do (let ((fragment-match-key (topology:make-fragment-match-key
                                         :before-monomer-context-index before-monomer-context-index
-                                        :after-monomer-context-index after-monomer-context-index
-                                        :before-fragment-conformation-index before-fragment-index)))
-               (setf (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map))
-                     after-fragment-match-vector)))
+                                        :after-monomer-context-index after-monomer-context-index)))
+               (let ((total-after-fragment-match-vector (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map))))
+                 (cond
+                   ((null total-after-fragment-match-vector)
+                    (setf total-after-fragment-match-vector (make-array (1+ before-fragment-index) :adjustable t)))
+                   ((<= (length total-after-fragment-match-vector) before-fragment-index)
+                    (adjust-array total-after-fragment-match-vector (1+ before-fragment-index))))
+                 (setf (aref total-after-fragment-match-vector before-fragment-index)
+                       after-fragment-match-vector)
+                 (setf (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map)) total-after-fragment-match-vector))))
   fragment-conformations-map)
 
 

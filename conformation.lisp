@@ -92,12 +92,15 @@ Specialize the foldamer argument to provide methods"))
                                (declare (ignore atom-id))
                                (kin:set-position joint (geom:vec 0.0 0.0 0.0))))))
 
-
-(defun fill-internals-from-fragments (conf fragments &optional (index 0))
+#|
+(defun fill-internals-from-random-fragments (conf fragments &optional (index 0))
   "Fill internal coordinates from the fragments"
   (loop with atagg = (ataggregate conf)
         with atmol = (elt (atmolecules atagg) 0)
-        for monomer across (monomers (oligomer conf))
+        with previous-monomer-context = nil
+        with previous-monomer-context-index = 0
+        with previous-monomer-context-index = 0
+        for monomer in (ordered-monomers (oligomer conf))
         for monomer-context = (gethash monomer (monomer-contexts conf))
         for frags = (gethash monomer-context (monomer-context-to-fragment-conformations fragments))
         for monomer-index = (gethash monomer (monomer-positions conf))
@@ -115,10 +118,15 @@ Specialize the foldamer argument to provide methods"))
         do (loop for joint across (joints atres)
                  for internal in (internals fragment-internals)
                  do (fill-joint-internals joint internal))
+        do previous-monomer-context = monomer-context
+        do previous-monomer-context-index = monomer-context-index
+        do previous-fragment-internals-index = fragment-internals-index
         ))
+|#
 
-(defun build-conformation (oligomer-space fragment-conformations)
-  (format t "Entered build-conformation~%")
+
+
+(defun build-shape (oligomer-space fragment-conformations)
   (let* ((oligomer (topology:make-oligomer oligomer-space 0))
          (conf (topology:make-conformation oligomer)))
     (topology::fill-internals-from-fragments conf fragment-conformations)

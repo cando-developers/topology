@@ -60,6 +60,9 @@
         unless (has-in-coupling-p monomer)
           do (return-from root-monomer monomer)))
 
+
+
+
 (defun canonical-sequence-monomer (oligomer coupling root monomer-out-couplings unique-ring-couplings)
   (let* ((outs (gethash root monomer-out-couplings))
          (result (list* (current-stereoisomer-name root oligomer)

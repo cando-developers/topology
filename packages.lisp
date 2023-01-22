@@ -137,9 +137,7 @@
 
    #:missing-fragment-match
    #:fragment-match-key
-   #:missing-fragment-match-key
    #:make-fragment-match-key
-   #:make-missing-fragment-match-key
    #:matched-fragment-conformations-map
    #:missing-fragment-matches
    #:fragment-matches
@@ -157,7 +155,11 @@
    #:monomer-contexts-vector
    #:focus-monomer-name
    
-   ))
+   #:build-shape
+   #:monomer-shapes
+   #:monomer-shape-vector
+   #:root-monomer
+   #:random-fragment-conformation-index))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -186,7 +188,7 @@
    #:calculate-files
    #:verify-foldamer-describes-oligomer-space
    #:valid-trainer-contexts
-   #:assemble-fragment-conformations-map
+   #:extract-fragment-conformations-map
 
    #:foldamer-setup
    #:foldamer-status
@@ -195,4 +197,9 @@
 
    #:trainer-context
    #:trainer-job
-   #:node-index))
+   #:node-index
+   #:optimize-fragment-conformations-map
+   #:foldamer-describe-missing-fragment-matches
+   #:monomer-contents-vector
+   #:foldamer-describe-missing-match
+   #:angle-difference))

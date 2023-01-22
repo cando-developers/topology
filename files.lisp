@@ -153,16 +153,74 @@
   (sys:quit))
 
 
-(defun foldamer-extract-conformations (&key (path #P"./") spiros verbose)
-  (format t "Extracting conformations~%")
-  (let ((foldamer-conformations-map (foldamer::assemble-fragment-conformations-map path)))
+(defun foldamer-extract-conformations (&key (path #P"./conformations.cando") spiros verbose)
+  (format t "Extracting conformations for the path: ~a~%" path)
+  (let ((foldamer-conformations-map (foldamer:extract-fragment-conformations-map path)))
     (format t "Matching fragment conformations~%")
-    (let ((matched (foldamer::optimize-fragment-conformations-map foldamer-conformations-map spiros verbose)))
-      (format t "Report ~a~%" (multiple-value-list (topology:matched-fragment-conformations-summary matched)))
+    (let ((matched (foldamer:optimize-fragment-conformations-map foldamer-conformations-map spiros verbose)))
+      (multiple-value-bind (fragment-total matched-fragments-total missing-matches-total)
+          (topology:matched-fragment-conformations-summary matched)
+        (format t "Total fragments:    ~8d~%" fragment-total)
+        (format t "Matching fragments: ~8d~%" matched-fragments-total)
+        (format t "Missing matches:    ~8d~%" missing-matches-total)
+        (format t "Fraction missing:   ~8,5f~%" (float (/ missing-matches-total (+ missing-matches-total matched-fragments-total)))))
       (format t "Saving ~a~%" path)
       (cando:save-cando matched path)
       )))
 
+
+(defun foldamer-describe-missing-fragment-matches (fragment-conformations-map)
+  (let ((*print-pretty* nil))
+    (maphash (lambda (key value)
+               (let ((before-monomer-context (aref (topology:monomer-contexts-vector fragment-conformations-map) (topology:fragment-match-key-before-monomer-context-index key)))
+                     (after-monomer-context (aref (topology:monomer-contexts-vector fragment-conformations-map) (topology:fragment-match-key-after-monomer-context-index key))))
+                 (format t "~a ~a ~a~%" before-monomer-context after-monomer-context value)))
+             (topology:missing-fragment-matches fragment-conformations-map))))
+
+(defun dump-internals (message internals &optional compare)
+  (format t "~a~%" message)
+  (loop for internal in (coerce internals 'list)
+        for index below (if compare (length compare) (length internals))
+        for name = (topology:name internal)
+        for dih = (/ (topology:dihedral internal) 0.0174533)
+        do (progn
+             (format t " ~4a ~7,1f" name dih)
+             (when compare
+               (let ((other-dih (/ (topology:dihedral (elt compare index)) 0.0174533)))
+                 (format t "   ~7,1f  ~a" other-dih (if (< (foldamer:angle-difference dih other-dih) 30.0) "MATCH" "---"))))
+             (format t "~%"))))
+             
+
+(defun foldamer-describe-missing-match (fragment-conformations-map before-monomer-context after-monomer-context &optional before-fragment-index after-monomer)
+  (let* ((before-monomer-context-index (gethash before-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
+         (after-monomer-context-index (gethash after-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
+         (match-key (topology:make-fragment-match-key
+                     :before-monomer-context-index before-monomer-context-index
+                     :after-monomer-context-index after-monomer-context-index))
+         (missing-match-vec (gethash match-key (topology:missing-fragment-matches fragment-conformations-map))))
+    (cond
+      ((null before-fragment-index)
+       (format t "vec ~a~%" missing-match-vec))
+      ((null after-monomer)
+       (let* ((fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
+              (fragment-conformation (elt (topology:fragments fragment-conformations) before-fragment-index))
+              (out-of-focus (topology:out-of-focus-internals fragment-conformation)))
+         (maphash (lambda (key value)
+                    (format t "following monomer ~s ~s~%" key value))
+                  out-of-focus)))
+      (t 
+       (let* ((fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
+              (fragment-conformation (elt (topology:fragments fragment-conformations) before-fragment-index))
+              (out-of-focus (topology:out-of-focus-internals fragment-conformation))
+              (out-of-focus-internals (gethash after-monomer out-of-focus)))
+         (if out-of-focus-internals
+             (progn
+               (dump-internals "before internals" out-of-focus-internals)
+               (loop with after-fragment-conformations = (gethash after-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map))
+                     for after-fragment-index below (length (topology:fragments after-fragment-conformations))
+                     for after-fragment-conformation = (elt (topology:fragments after-fragment-conformations) after-fragment-index)
+                     for after-internals = (topology:internals after-fragment-conformation)
+                     do (dump-internals (format nil "after internals #~a" after-fragment-index) after-internals out-of-focus-internals)))))))))
 
 (defun foldamer-check-conformations (&optional (path #P"./") spiros)
   (format t "checking conformations~%")

@@ -392,7 +392,7 @@
 
 (defun out-of-focus-atresidue-internals (atmolecule focus-atresidue flog)
   "Extract the out-of-focus internals, these are internal coordinates in atresidues that are connected to the focus-atresidue
-by 3 or fewer bonds"
+by through a parent or grandparent"
   (let ((joint-to-atresidue (make-hash-table)))
     (loop with atresidues = (topology:atresidues atmolecule)
           for atresidue-index below (length atresidues)
@@ -424,7 +424,7 @@ by 3 or fewer bonds"
                                                          (great-grandparent-atresidue (and great-grandparent (gethash great-grandparent joint-to-atresidue))))
                                                     (if (or (eq focus-atresidue parent-atresidue)
                                                             (eq focus-atresidue grandparent-atresidue)
-                                                            (eq focus-atresidue great-grandparent-atresidue))
+                                                            #+(or)(eq focus-atresidue great-grandparent-atresidue))
                                                         (vector-push-extend (extract-one-internal joint flog) internals-vector)
                                                         (return-from out-of-focus-internals internals-vector))))))
                        (setf (gethash (topology:stereoisomer-name atresidue) out-of-focus-internals) internals-vector))))))
@@ -432,14 +432,14 @@ by 3 or fewer bonds"
 
 (defun extract-focus-atresidue-internals (focus-atresidue atmolecule total-count flog)
   "Extract the internal coordinates for the atresidue.
-Also extract the out-of-focus-internals, the internals that leave the focus residue but are still within 3 bonds of
-the focus residue.  We need these to match fragment internals with each other later."
+Also extract the out-of-focus-internals, the internals that leave the focus residue but have a parent or grandparent in the focus residue.
+We need these to match fragment internals with each other later."
   (let* ((internals (loop for joint across (topology:joints focus-atresidue)
                           collect (extract-one-internal joint flog)))
          (out-of-focus-internals (out-of-focus-atresidue-internals atmolecule focus-atresidue flog)))
     (make-instance 'topology:fragment-internals
                    :index total-count
-                   :internals internals
+                   :internals (coerce internals 'vector)
                    :out-of-focus-internals out-of-focus-internals)))
 
 
@@ -501,11 +501,12 @@ the focus residue.  We need these to match fragment internals with each other la
                                  (progn
                                    (cando:starting-geometry-with-restarts agg :verbose verbose)))
                                (format flog "Found a starting geometry for total-count: ~a~%" total-count)
-                               (sdf:write-sdf-stream agg fsdf)
-                               (let ((maybe-bad-geometry (topology:bad-geometry-p agg)))
+                               (let ((data-items nil)
+                                     (maybe-bad-geometry (topology:bad-geometry-p agg)))
                                  (if (null maybe-bad-geometry)
                                      (progn
                                        (format flog "Passed (not (topology:bad-geometry-p agg))~%")
+                                       (push (cons "status" "good-geometry") data-items)
                                        (topology::copy-atom-positions-into-joints conf)
                                        (topology::update-joint-tree-internal-coordinates conf)
                                        (let* ((fragment-internals (extract-focus-atresidue-internals focus-atresidue atmolecule total-count flog))
@@ -513,19 +514,25 @@ the focus residue.  We need these to match fragment internals with each other la
                                          (if (topology:good-fragment-internals fragment-internals)
                                              (if (not seen-index)
                                                  (progn
+                                                   (push (cons "Seen" "false") data-items)
+                                                   (push (cons "internals-index" (length (topology:fragments fragment-conformations))) data-items)
                                                    (format flog "Saving fragment internals for conformation: ~a~%" total-count)
                                                    (topology:dump-fragment-internals fragment-internals flog)
                                                    (push fragment-internals (topology:fragments fragment-conformations)))
                                                  (progn
+                                                   (push (cons "Seen" "true") data-items)
                                                    (format flog "Ignoring conformation ~a - seen before at ~a~%" total-count seen-index)
                                                    (topology:dump-fragment-internals fragment-internals flog)
                                                    ))
                                              (progn
+                                               (push (cons "status" "ignoring conformation - failed (topology:good-fragment-internals fragment-internals)") data-items)
                                                (format flog "Ignoring conformation ~a - failed (topology:good-fragment-internals fragment-internals)~%" total-count)
                                                (topology:dump-fragment-internals fragment-internals flog)
                                                ))))
                                      (progn
-                                       (format flog "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a~%problem: ~a~%" total-count maybe-bad-geometry))))
+                                       (push (cons "status" (format nil "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a~%problem: ~a~%" total-count maybe-bad-geometry)) data-items)
+                                       (format flog "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a~%problem: ~a~%" total-count maybe-bad-geometry)))
+                                 (sdf:write-sdf-stream agg fsdf :name trainer-context :data-items (list* (cons "total-count index" total-count) data-items)))
                                (incf total-count)))))
                 (setf (topology:total-count fragment-conformations) total-count)
                 (topology:save-fragment-conformations fragment-conformations internals-file)
@@ -546,22 +553,30 @@ the focus residue.  We need these to match fragment internals with each other la
   (leap:load-smirnoff-params smirnoff)
   )
 
-(defun assemble-fragment-conformations-map (filename)
+(defun extract-fragment-conformations-map (filename &key (parallel nil))
+  "Parallel version is slower than serial because of false sharing in GC"
   (let* ((foldamer-filename (merge-pathnames #P"foldamer.dat" filename))
          (foldamer (cando:load-cando foldamer-filename))
          (fragment-conformations-map (make-instance 'topology:fragment-conformations-map)))
-    (loop for trainer-name in (valid-trainer-contexts foldamer)
-          do (format t "Extracting internals for ~a~%" trainer-name)
-             (finish-output)
+    (flet ((extract-one (trainer-name)
              (multiple-value-bind (input-file done-file sdf-file internals-file)
                  (calculate-files trainer-name filename)
                (declare (ignore input-file done-file sdf-file))
                (if (probe-file internals-file)
                    (let ((fragment-conformations (topology:load-fragment-conformations internals-file)))
-                     (setf (gethash trainer-name (topology:monomer-context-to-fragment-conformations fragment-conformations-map))
-                           fragment-conformations))
-                   (warn "Could not read file ~a" internals-file))))
-    fragment-conformations-map))
+                     (cons trainer-name fragment-conformations))
+                   (warn "Could not read file ~a" internals-file)))))
+      (let ((names-values
+              (if parallel
+                  (lparallel:pmapcar #'extract-one (valid-trainer-contexts foldamer))
+                  (mapcar #'extract-one (valid-trainer-contexts foldamer)))))
+        (loop for name-result in names-values
+              for trainer-name = (car name-result)
+              for fragment-conformations = (cdr name-result)
+              do (when trainer-name
+                   (setf (gethash trainer-name (topology:monomer-context-to-fragment-conformations fragment-conformations-map))
+                         fragment-conformations)))
+        fragment-conformations-map))))
 
 
 (defun check-fragment-conformations-map (filename)

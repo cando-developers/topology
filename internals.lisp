@@ -119,13 +119,7 @@
 
 (defstruct fragment-match-key
   before-monomer-context-index
-  after-monomer-context-index
-  before-fragment-conformation-index)
-
-(defstruct missing-fragment-match-key
-  before-monomer-context-index
-  after-monomer-context-index
-  )
+  after-monomer-context-index)
 
 (defstruct missing-fragment-match
   before-monomer-context
@@ -135,8 +129,8 @@
 (defconstant +dihedral-threshold+ (* 10.0 0.0174533))
 
 (defun similar-internals-p (frag1 frag2 &optional )
-  (loop for frag1-int in (internals frag1)
-        for frag2-int in (internals frag2)
+  (loop for frag1-int across (internals frag1)
+        for frag2-int across (internals frag2)
         do (when (and (typep frag1-int 'bonded-internal)
                       (typep frag2-int 'bonded-internal))
              (let* ((aa (- (dihedral frag1-int) (dihedral frag2-int)))
@@ -153,7 +147,7 @@
 
 
 (defun good-fragment-internals (fragment-internals)
-  (loop for internal in (internals fragment-internals)
+  (loop for internal across (internals fragment-internals)
         do (cond
              ((typep internal 'jump-internal))
              ((> (bond internal) 1.8)
@@ -173,7 +167,7 @@
   (format finternals "begin-conformation ~a~%" (index fragment-internals))
   (flet ((to-deg (rad)
            (/ rad 0.0174533)))
-    (loop for internal in (topology:internals fragment-internals)
+    (loop for internal across (topology:internals fragment-internals)
           do (cond
                ((typep internal 'topology:jump-internal)
                 (format finternals "jump-joint ~a~%" (topology:name internal)))
@@ -189,8 +183,28 @@
                         (topology:bond internal)
                         (to-deg (topology:angle internal))
                         (to-deg (topology:dihedral internal))))
-               )))
-  (format finternals "end-conformation~%"))
+               ))
+    (format finternals "end-conformation~%")
+    (maphash (lambda (key internals)
+               (format finternals "out-of-focus following-monomer ~a~%" key)
+               (loop for internal across internals
+                     do (cond
+                          ((typep internal 'topology:jump-internal)
+                           (format finternals "jump-joint ~a~%" (topology:name internal)))
+                          ((typep internal 'topology:complex-bonded-internal)
+                           (format finternals "complex-bonded-joint ~a ~8,3f ~8,3f ~8,3f~%"
+                                   (topology:name internal)
+                                   (topology:bond internal)
+                                   (to-deg (topology:angle internal))
+                                   (to-deg (topology:dihedral internal))))
+                          ((typep internal 'topology:bonded-internal)
+                           (format finternals "bonded-joint ~a ~8,3f ~8,3f ~8,3f~%"
+                                   (topology:name internal)
+                                   (topology:bond internal)
+                                   (to-deg (topology:angle internal))
+                                   (to-deg (topology:dihedral internal))))
+                          )))
+             (topology:out-of-focus-internals fragment-internals))))
 
 
 (defgeneric fill-joint-internals (joint internal))
