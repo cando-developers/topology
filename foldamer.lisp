@@ -518,17 +518,15 @@ We need these to match fragment internals with each other later."
                                                    (push (cons "internals-index" (length (topology:fragments fragment-conformations))) data-items)
                                                    (format flog "Saving fragment internals for conformation: ~a~%" total-count)
                                                    (topology:dump-fragment-internals fragment-internals flog)
-                                                   (push fragment-internals (topology:fragments fragment-conformations)))
+                                                   (vector-push-extend fragment-internals (topology:fragments fragment-conformations)))
                                                  (progn
                                                    (push (cons "Seen" "true") data-items)
                                                    (format flog "Ignoring conformation ~a - seen before at ~a~%" total-count seen-index)
-                                                   (topology:dump-fragment-internals fragment-internals flog)
-                                                   ))
+                                                   (topology:dump-fragment-internals fragment-internals flog)))
                                              (progn
                                                (push (cons "status" "ignoring conformation - failed (topology:good-fragment-internals fragment-internals)") data-items)
                                                (format flog "Ignoring conformation ~a - failed (topology:good-fragment-internals fragment-internals)~%" total-count)
-                                               (topology:dump-fragment-internals fragment-internals flog)
-                                               ))))
+                                               (topology:dump-fragment-internals fragment-internals flog)))))
                                      (progn
                                        (push (cons "status" (format nil "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a~%problem: ~a~%" total-count maybe-bad-geometry)) data-items)
                                        (format flog "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a~%problem: ~a~%" total-count maybe-bad-geometry)))
@@ -550,8 +548,7 @@ We need these to match fragment internals with each other later."
 
 
 (defun prepare-to-build-trainer (&key (smirnoff #P"~/Development/openff-sage/inputs-and-results/optimizations/vdw-v1/forcefield/force-field.offxml" ))
-  (leap:load-smirnoff-params smirnoff)
-  )
+  (leap:load-smirnoff-params smirnoff))
 
 (defun extract-fragment-conformations-map (filename &key (parallel nil))
   "Parallel version is slower than serial because of false sharing in GC"
