@@ -174,7 +174,7 @@
     (maphash (lambda (key value)
                (let ((before-monomer-context (aref (topology:monomer-contexts-vector fragment-conformations-map) (topology:fragment-match-key-before-monomer-context-index key)))
                      (after-monomer-context (aref (topology:monomer-contexts-vector fragment-conformations-map) (topology:fragment-match-key-after-monomer-context-index key))))
-                 (format t "~a ~a ~a~%" before-monomer-context after-monomer-context value)))
+                 (format t "~s ~s ~a~%" before-monomer-context after-monomer-context value)))
              (topology:missing-fragment-matches fragment-conformations-map))))
 
 (defun dump-internals (message internals &optional compare)
