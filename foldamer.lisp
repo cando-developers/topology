@@ -459,7 +459,13 @@ We need these to match fragment internals with each other later."
           (multiple-value-bind (oligomer focus-monomer)
               (find-oligomer-for-monomer-context foldamer trainer-context)
             (let* ((fragment-conformations (if (probe-file internals-file)
-                                               (topology:load-fragment-conformations internals-file)
+                                               (let* ((frag-confs (topology:load-fragment-conformations internals-file))
+						      (frags-vec (topology:fragments frag-confs)))
+						 (reinitialize-instance frag-confs
+									:fragments (make-array (length frags-vec) 
+											       :adjustable t 
+											       :fill-pointer (length frags-vec) 
+											       :initial-contents frags-vec)))
                                                (make-instance 'topology:fragment-conformations
                                                               :focus-monomer-name (topology:current-stereoisomer-name focus-monomer oligomer)
                                                               :monomer-context trainer-context))))
