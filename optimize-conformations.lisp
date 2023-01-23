@@ -25,6 +25,8 @@
 	    (decf diff 360)
 	    diff))))
 
+(defparameter *angle-threshold* 30.0)
+
 (defun fragments-match-p (before-fragment after-fragment after-fragment-focus-monomer-name)
   "Return T for the time being"
   (let ((before-fragment-out-of-focus (gethash after-fragment-focus-monomer-name (topology:out-of-focus-internals before-fragment))))
@@ -41,71 +43,85 @@
                (let* ((diha (/ (topology:dihedral before-bonded-internal) 0.0174533))
                       (dihb (/ (topology:dihedral after-bonded-internal) 0.0174533))
                       (delta-angle (abs (angle-difference diha dihb))))
-                 (when (> delta-angle 20.0)
+                 (when (> delta-angle *angle-threshold*)
                    (return-from fragments-match-p nil)))))
     t))
 
-(defun match-conformations (before-monomer-context before-fragment-conformations
-                            after-monomer-context after-fragment-conformations
-                            fragment-conformations-map verbose)
-  (loop with before-monomer-context-index = (gethash before-monomer-context (topology:monomer-context-index-map fragment-conformations-map))
-        with after-monomer-context-index = (gethash after-monomer-context (topology:monomer-context-index-map fragment-conformations-map))
-        with before-fragments = (topology:fragments before-fragment-conformations)
-        with after-fragments =  (topology:fragments after-fragment-conformations)
-        with before-fragment-match-table = (make-array (length before-fragments))
-        with after-fragment-focus-monomer-name = (topology:focus-monomer-name after-fragment-conformations)
-        for before-fragment across before-fragments
-        for before-fragment-index from 0
-        for after-fragment-match-vector = (loop named build-or-reuse-match
-                                                with new-after-fragment-match-vector = (make-array 16 :element-type 'fixnum :adjustable t :fill-pointer 0)
-                                                for after-fragment across after-fragments
-                                                for after-fragment-index from 0
-                                                for match = (fragments-match-p before-fragment after-fragment after-fragment-focus-monomer-name)
-                                                when match
-                                                  do (vector-push-extend after-fragment-index new-after-fragment-match-vector)
-                                                finally (loop named reuse-results
-                                                              for ii from 0 below before-fragment-index
-                                                              for previous-after-fragment-match-vector = (elt before-fragment-match-table ii)
-                                                              when (equalp previous-after-fragment-match-vector new-after-fragment-match-vector)
-                                                                do (return-from build-or-reuse-match previous-after-fragment-match-vector)
-                                                              finally (return-from build-or-reuse-match new-after-fragment-match-vector)))
-        do (when (and verbose (= (length after-fragment-match-vector) 0))
-             (format t "Empty after-fragment-match-vector for ~a -> ~a : ~a~%" before-monomer-context after-monomer-context before-fragment-index)
-             (let* ((fragment (elt (topology:fragments before-fragment-conformations) before-fragment-index))
-                    (out-of-focus-internals (gethash after-fragment-focus-monomer-name (topology:out-of-focus-internals fragment))))
-               (format t "~14a~{(~{~3a ~7,1f~})~}~%"
-                       "Before"
-                       (loop for internal across out-of-focus-internals
-                             collect (list (topology:name internal) (/ (topology:dihedral internal) 0.0174533))))
-               (loop for index below (length (topology:fragments after-fragment-conformations))
-                     for after-fragment = (elt (topology:fragments after-fragment-conformations) index)
-                     do (format t "~10a~4a~{(~{~3a ~7,1f~})~}~%"
-                                "After" (format nil "~-4d" index)
-                                (loop for ii below 5
-                                      for internal = (elt (topology:internals after-fragment) ii)
-                                      collect (list (topology:name internal) (/ (topology:dihedral internal) 0.0174533)))))
-               #+(or)(break "out-of-focus-internals ~a" out-of-focus-internals)
-               ))
-        if (= (length after-fragment-match-vector) 0)
-          do (pushnew before-fragment-index (gethash (topology:make-fragment-match-key
-                                                      :before-monomer-context-index before-monomer-context-index
-                                                      :after-monomer-context-index after-monomer-context-index)
-                                                     (topology:missing-fragment-matches fragment-conformations-map)
-                                                     nil))
-        else
-          do (let ((fragment-match-key (topology:make-fragment-match-key
-                                        :before-monomer-context-index before-monomer-context-index
-                                        :after-monomer-context-index after-monomer-context-index)))
-               (let ((total-after-fragment-match-vector (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map))))
-                 (cond
-                   ((null total-after-fragment-match-vector)
-                    (setf total-after-fragment-match-vector (make-array (1+ before-fragment-index) :adjustable t)))
-                   ((<= (length total-after-fragment-match-vector) before-fragment-index)
-                    (adjust-array total-after-fragment-match-vector (1+ before-fragment-index))))
-                 (setf (aref total-after-fragment-match-vector before-fragment-index)
-                       after-fragment-match-vector)
-                 (setf (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map)) total-after-fragment-match-vector))))
-  fragment-conformations-map)
+(defun find-after-fragment-match-vector (before-fragment before-fragment-match-table before-fragment-index after-fragment-focus-monomer-name after-fragments &key verbose)
+  (loop named build-or-reuse-match
+        with new-after-fragment-match-vector = (make-array 16 :element-type 'fixnum :adjustable t :fill-pointer 0)
+        for after-fragment across after-fragments
+        for after-fragment-index from 0
+        for match = (fragments-match-p before-fragment after-fragment after-fragment-focus-monomer-name)
+        when match
+          do (vector-push-extend after-fragment-index new-after-fragment-match-vector)
+        finally (loop named reuse-results
+                      for ii from 0 below before-fragment-index
+                      for previous-after-fragment-match-vector = (elt before-fragment-match-table ii)
+                      when (equalp previous-after-fragment-match-vector new-after-fragment-match-vector)
+                        do (return-from build-or-reuse-match previous-after-fragment-match-vector)
+                      finally (return-from build-or-reuse-match new-after-fragment-match-vector))))
+
+(defun match-conformations (fragment-conformations-map before-monomer-context after-monomer-context &key debug)
+  (let* ((before-fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
+         (after-fragment-conformations (gethash after-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
+         (before-monomer-context-index (gethash before-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
+         (after-monomer-context-index (gethash after-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
+         (before-fragments (topology:fragments before-fragment-conformations))
+         (after-fragments  (topology:fragments after-fragment-conformations))
+         (before-fragment-match-table (make-array (length before-fragments)))
+         (after-fragment-focus-monomer-name (topology:focus-monomer-name after-fragment-conformations)))
+    (loop for before-fragment across before-fragments
+          for before-fragment-index from 0
+          for after-fragment-match-vector = (find-after-fragment-match-vector before-fragment before-fragment-match-table before-fragment-index after-fragment-focus-monomer-name after-fragments)
+          do (if debug
+                 (let ((*print-pretty* nil))
+                   (flet ((show-internals ()
+                            (let* ((fragment (elt (topology:fragments before-fragment-conformations) before-fragment-index))
+                                   (out-of-focus-internals (gethash after-fragment-focus-monomer-name (topology:out-of-focus-internals fragment))))
+                              (format t "~14a~{(~{~3a ~6,1f      ~})~}~%"
+                                      "Before"
+                                      (loop for internal across out-of-focus-internals
+                                            collect (list (topology:name internal) (/ (topology:dihedral internal) 0.0174533))))
+                              (loop for index below (length (topology:fragments after-fragment-conformations))
+                                    for after-fragment = (elt (topology:fragments after-fragment-conformations) index)
+                                    do (format t "~10a~4a~{(~{~3a ~6,1f ~5a~})~}~%"
+                                               "After" (format nil "~-4d" index)
+                                               (loop for ii below (length out-of-focus-internals)
+                                                     for before-internal = (elt out-of-focus-internals ii)
+                                                     for after-internal = (elt (topology:internals after-fragment) ii)
+                                                     for before-dih = (/ (topology:dihedral before-internal) 0.0174533)
+                                                     for after-dih = (/ (topology:dihedral after-internal) 0.0174533)
+                                                     for delta-dih = (abs (foldamer:angle-difference before-dih after-dih))
+                                                     collect (list (topology:name after-internal) after-dih (if (< delta-dih *angle-threshold*) "MATCH" "     ")))
+                                               #+(or)(break "out-of-focus-internals ~a" out-of-focus-internals)
+                                               )))))
+                     (if (= (length after-fragment-match-vector) 0)
+                         (progn
+                           (format t "Empty after-fragment-match-vector for ~a -> ~a : ~a~%" before-monomer-context after-monomer-context before-fragment-index)
+                           (show-internals))
+                         (progn
+                           (format t "Match ~s ~a -> ~s == ~s~%" before-monomer-context before-fragment-index after-monomer-context after-fragment-match-vector)
+                           (show-internals)))))
+                 (if (= (length after-fragment-match-vector) 0)
+                     (pushnew before-fragment-index (gethash (topology:make-fragment-match-key
+                                                              :before-monomer-context-index before-monomer-context-index
+                                                              :after-monomer-context-index after-monomer-context-index)
+                                                             (topology:missing-fragment-matches fragment-conformations-map)
+                                                             nil))
+                     (let ((fragment-match-key (topology:make-fragment-match-key
+                                                :before-monomer-context-index before-monomer-context-index
+                                                :after-monomer-context-index after-monomer-context-index)))
+                       (let ((total-after-fragment-match-vector (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map))))
+                         (cond
+                           ((null total-after-fragment-match-vector)
+                            (setf total-after-fragment-match-vector (make-array (1+ before-fragment-index) :adjustable t)))
+                           ((<= (length total-after-fragment-match-vector) before-fragment-index)
+                            (adjust-array total-after-fragment-match-vector (1+ before-fragment-index))))
+                         (setf (aref total-after-fragment-match-vector before-fragment-index)
+                               after-fragment-match-vector)
+                         (setf (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map)) total-after-fragment-match-vector))))))
+    fragment-conformations-map))
 
 
 (defun matching-oligomers-p (before-monomer-context before-oligomer before-focus-monomer before-focus-monomer-name
@@ -212,13 +228,7 @@
               for before-monomer-context = (before-monomer-context monomer-context-pair)
               for after-monomer-context = (after-monomer-context monomer-context-pair)
               with monomer-context-to-fragment-conformations = (topology:monomer-context-to-fragment-conformations fragment-conformations-map)
-              for before-monomer-context-index = (gethash before-monomer-context monomer-context-index-map)
-              for before-fragment-conformations = (gethash before-monomer-context monomer-context-to-fragment-conformations) 
-              for after-monomer-context-index = (gethash after-monomer-context monomer-context-index-map)
-              for after-fragment-conformations = (gethash after-monomer-context monomer-context-to-fragment-conformations)
-              do (match-conformations before-monomer-context before-fragment-conformations
-                                      after-monomer-context after-fragment-conformations
-                                      fragment-conformations-map verbose)
+              do (match-conformations fragment-conformations-map before-monomer-context after-monomer-context)
               do (incf num-pairs))
         (values fragment-conformations-map num-pairs)))))
 
@@ -229,8 +239,8 @@
 (defun analyze-missing-conformations (confs)
   (let ((*print-pretty* nil))
     (maphash (lambda (key value)
-               (let* ((before-monomer-context-index (topology:missing-fragment-match-key-before-monomer-context-index key))
-                      (after-monomer-context-index (topology:missing-fragment-match-key-after-monomer-context-index key))
+               (let* ((before-monomer-context-index (topology:fragment-match-key-before-monomer-context-index key))
+                      (after-monomer-context-index (topology:fragment-match-key-after-monomer-context-index key))
                       (before-monomer-context (elt (topology:monomer-contexts-vector confs) before-monomer-context-index))
                       (after-monomer-context (elt (topology:monomer-contexts-vector confs) after-monomer-context-index))
                       (before-fragment (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations confs)))

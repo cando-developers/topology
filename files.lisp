@@ -187,7 +187,7 @@
              (format t " ~4a ~7,1f" name dih)
              (when compare
                (let ((other-dih (/ (topology:dihedral (elt compare index)) 0.0174533)))
-                 (format t "   ~7,1f  ~a" other-dih (if (< (foldamer:angle-difference dih other-dih) 30.0) "MATCH" "---"))))
+                 (format t "   ~7,1f  ~a" other-dih (if (< (abs (foldamer:angle-difference dih other-dih)) 30.0) "MATCH" "---"))))
              (format t "~%"))))
              
 
