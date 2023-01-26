@@ -1,6 +1,6 @@
 (in-package :foldamer)
 
-(defun build-monomer-context-index-map (confs)
+#+(or)(defun build-monomer-context-index-map (confs)
   (let ((monomer-context-index (make-hash-table :test 'equal))
         (monomer-contexts-vector (make-array (hash-table-count (topology:monomer-context-to-fragment-conformations confs)))))
     (with-hash-table-iterator (my-iterator (topology:monomer-context-to-fragment-conformations confs))
@@ -65,8 +65,6 @@
 (defun match-conformations (fragment-conformations-map before-monomer-context after-monomer-context &key debug)
   (let* ((before-fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
          (after-fragment-conformations (gethash after-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
-         (before-monomer-context-index (gethash before-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
-         (after-monomer-context-index (gethash after-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
          (before-fragments (topology:fragments before-fragment-conformations))
          (after-fragments  (topology:fragments after-fragment-conformations))
          (before-fragment-match-table (make-array (length before-fragments)))
@@ -103,24 +101,16 @@
                          (progn
                            (format t "Match ~s ~a -> ~s == ~s~%" before-monomer-context before-fragment-index after-monomer-context after-fragment-match-vector)
                            (show-internals)))))
-                 (if (= (length after-fragment-match-vector) 0)
-                     (pushnew before-fragment-index (gethash (topology:make-fragment-match-key
-                                                              :before-monomer-context-index before-monomer-context-index
-                                                              :after-monomer-context-index after-monomer-context-index)
-                                                             (topology:missing-fragment-matches fragment-conformations-map)
-                                                             nil))
-                     (let ((fragment-match-key (topology:make-fragment-match-key
-                                                :before-monomer-context-index before-monomer-context-index
-                                                :after-monomer-context-index after-monomer-context-index)))
-                       (let ((total-after-fragment-match-vector (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map))))
-                         (cond
-                           ((null total-after-fragment-match-vector)
-                            (setf total-after-fragment-match-vector (make-array (1+ before-fragment-index) :adjustable t)))
-                           ((<= (length total-after-fragment-match-vector) before-fragment-index)
-                            (adjust-array total-after-fragment-match-vector (1+ before-fragment-index))))
-                         (setf (aref total-after-fragment-match-vector before-fragment-index)
-                               after-fragment-match-vector)
-                         (setf (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map)) total-after-fragment-match-vector))))))
+                 (let ((fragment-match-key (cons before-monomer-context after-monomer-context)))
+                   (let ((total-after-fragment-match-vector (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map))))
+                     (cond
+                       ((null total-after-fragment-match-vector)
+                        (setf total-after-fragment-match-vector (make-array (1+ before-fragment-index) :adjustable t)))
+                       ((<= (length total-after-fragment-match-vector) before-fragment-index)
+                        (adjust-array total-after-fragment-match-vector (1+ before-fragment-index))))
+                     (setf (aref total-after-fragment-match-vector before-fragment-index)
+                           after-fragment-match-vector)
+                     (setf (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map)) total-after-fragment-match-vector)))))
     fragment-conformations-map))
 
 
@@ -153,6 +143,10 @@
   ((before-monomer-context :initarg :before-monomer-context :accessor before-monomer-context)
    (after-monomer-context :initarg :after-monomer-context :accessor after-monomer-context)))
 
+(defmethod print-object ((obj monomer-context-pair) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "~s ~s" (before-monomer-context obj) (after-monomer-context obj))))
+
 (defun over-matching-oligomers (before-training-oligomer-space
                                 after-training-oligomer-space)
   (let ((before-iterator (oligomer-monomer-context-focus-monomer-iterator before-training-oligomer-space))
@@ -161,13 +155,13 @@
           do (multiple-value-bind (number-remaining before-oligomer before-monomer-context before-focus-monomer before-focus-monomer-name)
                  (funcall before-iterator)
                (unless number-remaining (return-from before-loop nil))
-               (when (and number-remaining (> number-remaining 0))
+               (when (and number-remaining (>= number-remaining 0))
                  (let ((after-iterator (oligomer-monomer-context-focus-monomer-iterator after-training-oligomer-space)))
                    (loop named after-loop
                          do (multiple-value-bind (number-remaining after-oligomer after-monomer-context after-focus-monomer after-focus-monomer-name)
                                 (funcall after-iterator)
                               (unless number-remaining (return-from after-loop nil))
-                              (when (and number-remaining (> number-remaining 0))
+                              (when (and number-remaining (>= number-remaining 0))
                                 (when (matching-oligomers-p before-monomer-context before-oligomer before-focus-monomer before-focus-monomer-name
                                                             after-monomer-context after-oligomer after-focus-monomer after-focus-monomer-name)
                                   (push (make-instance 'monomer-context-pair
@@ -215,29 +209,28 @@
 
 (defun optimize-fragment-conformations-map (simple-fragment-conformations-map foldamer verbose)
   (let ((all-matching-monomer-contexts (all-matching-monomer-contexts foldamer)))
-    (multiple-value-bind (monomer-context-index-map monomer-contexts-vector)
-        (build-monomer-context-index-map simple-fragment-conformations-map)
-      (let ((fragment-conformations-map
-              (make-instance 'topology:matched-fragment-conformations-map
-                             :monomer-context-to-fragment-conformations
-                             (topology:monomer-context-to-fragment-conformations simple-fragment-conformations-map)
-                             :monomer-context-index-map monomer-context-index-map
-                             :monomer-contexts-vector monomer-contexts-vector))
-            (num-pairs 0))
-        (loop for monomer-context-pair in all-matching-monomer-contexts
-              for before-monomer-context = (before-monomer-context monomer-context-pair)
-              for after-monomer-context = (after-monomer-context monomer-context-pair)
-              with monomer-context-to-fragment-conformations = (topology:monomer-context-to-fragment-conformations fragment-conformations-map)
-              do (match-conformations fragment-conformations-map before-monomer-context after-monomer-context)
-              do (incf num-pairs))
-        (values fragment-conformations-map num-pairs)))))
+    (when verbose (format t "There are ~a matching monomer-contexts~%" (length all-matching-monomer-contexts)))
+    (let ((fragment-conformations-map
+            (make-instance 'topology:matched-fragment-conformations-map
+                           :monomer-context-to-fragment-conformations
+                           (topology:monomer-context-to-fragment-conformations simple-fragment-conformations-map)
+                           ))
+          (num-pairs 0))
+      (loop for monomer-context-pair in all-matching-monomer-contexts
+            for before-monomer-context = (before-monomer-context monomer-context-pair)
+            for after-monomer-context = (after-monomer-context monomer-context-pair)
+            do (match-conformations fragment-conformations-map before-monomer-context after-monomer-context)
+            ;;do (break "Check arg ~a" fragment-conformations-map)
+            do (incf num-pairs))
+      (values fragment-conformations-map num-pairs))))
 
 
 
 
 
 (defun analyze-missing-conformations (confs)
-  (let ((*print-pretty* nil))
+  (error "Implement me")
+  #+(or)(let ((*print-pretty* nil))
     (maphash (lambda (key value)
                (let* ((before-monomer-context-index (topology:fragment-match-key-before-monomer-context-index key))
                       (after-monomer-context-index (topology:fragment-match-key-after-monomer-context-index key))
@@ -253,4 +246,5 @@
                        )
                  ))
              (topology:missing-fragment-matches confs))))
+
 

@@ -136,12 +136,8 @@
    #:restraints
 
    #:missing-fragment-match
-   #:fragment-match-key
-   #:make-fragment-match-key
    #:matched-fragment-conformations-map
-   #:missing-fragment-matches
    #:fragment-matches
-   #:monomer-context-index-map
    #:oligomer-monomer-name-at-index
    #:oligomer-monomer-name-for-monomer
    #:directional-coupling-iterator
@@ -159,7 +155,9 @@
    #:monomer-shapes
    #:monomer-shape-vector
    #:root-monomer
-   #:random-fragment-conformation-index))
+   #:random-fragment-conformation-index
+   #:make-oligomer-shape
+   ))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -202,4 +200,5 @@
    #:foldamer-describe-missing-fragment-matches
    #:monomer-contents-vector
    #:foldamer-describe-missing-match
-   #:angle-difference))
+   #:angle-difference
+   #:monomer-context))

@@ -2,10 +2,15 @@
 
 
 (defclass monomer-shape ()
-  ((fragment-conformation-index :initarg :fragment-conformation-index)
+  ((fragment-conformation-index :initform nil :initarg :fragment-conformation-index :accessor fragment-conformation-index)
    (monomer :initarg :monomer :accessor monomer)
    (monomer-context :initarg :monomer-context :accessor monomer-context)
-   (monomer-context-index :initarg :monomer-context-index :accessor monomer-context-index)))
+   (fragment-conformations :initarg :fragment-conformations :accessor fragment-conformations)
+   ))
+
+(defmethod print-object ((obj monomer-shape) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "~a ~a" (monomer obj) (fragment-conformation-index obj))))
 
 (defclass oligomer-shape ()
   ((oligomer :initarg :oligomer :accessor oligomer)
@@ -29,11 +34,11 @@
             for index from 0
             for monomer across (monomers oligomer)
             for monomer-context = (topology:foldamer-monomer-context monomer oligomer foldamer)
-            for monomer-context-index = (gethash monomer-context (monomer-context-index-map matched-fragment-conformations-map))
+            for fragment-conformations = (gethash monomer-context (topology:monomer-context-to-fragment-conformations matched-fragment-conformations-map))
             for monomer-shape = (make-instance 'monomer-shape
                                                :monomer monomer
                                                :monomer-context monomer-context
-                                               :monomer-context-index monomer-context-index)
+                                               :fragment-conformations fragment-conformations)
             for couplings = (couplings monomer)
             for in-monomer = nil
             for out-mons = nil
@@ -70,7 +75,7 @@
   (format t "monomer ~a in: ~a~%" root (gethash root (in-monomers shape)))
   (let ((out-monomers (gethash root (out-monomers shape))))
     (loop for out-monomer in out-monomers
-          do (all-monomers-repl out-monomer shape))))
+          do (all-monomers-impl out-monomer shape))))
 
 (defun all-monomers (shape)
   (let ((root (the-root-monomer shape)))
@@ -79,12 +84,21 @@
 
 
 
-(defun random-fragment-conformation-index-impl (root shape)
-  (format t "monomer ~a in: ~a~%" root (gethash root (in-monomers shape)))
-  (let ((out-monomers (gethash root (out-monomers shape))))
+(defun random-fragment-conformation-index-impl (root-monomer-shape oligomer-shape)
+  (let ((out-monomers (gethash (monomer root-monomer-shape) (out-monomers oligomer-shape))))
     (loop for out-monomer in out-monomers
-          do (all-monomers-repl out-monomer shape))))
+          for out-monomer-shape = (gethash out-monomer (monomer-shape-map oligomer-shape))
+          for fragment-match-key = (cons (monomer-context root-monomer-shape) (monomer-context out-monomer-shape))
+          for allowed-fragment-vec = (gethash fragment-match-key (topology:fragment-matches (topology:matched-fragment-conformations-map oligomer-shape)))
+          for allowed-fragment-indices = (elt allowed-fragment-vec (fragment-conformation-index root-monomer-shape))
+          for fragment-conformation-index = (if allowed-fragment-indices
+                                                (elt allowed-fragment-indices (random (length allowed-fragment-indices)))
+                                                :BADBADBAD)
+          do (setf (fragment-conformation-index out-monomer-shape) fragment-conformation-index)
+          do (random-fragment-conformation-index-impl out-monomer-shape oligomer-shape))))
 
-(defun random-fragment-conformation-index (shape)
-  (let ((root (the-root-monomer shape)))
-    (random-fragment-conformation-index-impl root shape)))
+(defun random-fragment-conformation-index (oligomer-shape)
+  (let* ((root (the-root-monomer oligomer-shape))
+         (root-monomer-shape (gethash root (monomer-shape-map oligomer-shape))))
+    (setf (fragment-conformation-index root-monomer-shape) (random (length (topology:fragments (fragment-conformations root-monomer-shape)))))
+    (random-fragment-conformation-index-impl root-monomer-shape oligomer-shape)))

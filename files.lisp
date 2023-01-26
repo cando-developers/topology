@@ -153,29 +153,74 @@
   (sys:quit))
 
 
+
+(defun foldamer-report-conformations (matched)
+  (multiple-value-bind (fragment-total matched-fragments-total missing-matches-total)
+      (topology:matched-fragment-conformations-summary matched)
+    (format t "Total fragments:    ~8d~%" fragment-total)
+    (format t "Matching fragments: ~8d~%" matched-fragments-total)
+    (format t "Missing matches:    ~8d~%" missing-matches-total)
+    (format t "Fraction missing:   ~8,5f~%" (float (/ missing-matches-total (+ missing-matches-total matched-fragments-total))))))
+
 (defun foldamer-extract-conformations (&key (path #P"./conformations.cando") spiros verbose)
   (format t "Extracting conformations for the path: ~a~%" path)
   (let ((foldamer-conformations-map (foldamer:extract-fragment-conformations-map path)))
     (format t "Matching fragment conformations~%")
     (let ((matched (foldamer:optimize-fragment-conformations-map foldamer-conformations-map spiros verbose)))
-      (multiple-value-bind (fragment-total matched-fragments-total missing-matches-total)
-          (topology:matched-fragment-conformations-summary matched)
-        (format t "Total fragments:    ~8d~%" fragment-total)
-        (format t "Matching fragments: ~8d~%" matched-fragments-total)
-        (format t "Missing matches:    ~8d~%" missing-matches-total)
-        (format t "Fraction missing:   ~8,5f~%" (float (/ missing-matches-total (+ missing-matches-total matched-fragments-total)))))
+      (foldamer-report-conformations matched)
       (format t "Saving ~a~%" path)
       (cando:save-cando matched path)
       )))
 
 
 (defun foldamer-describe-missing-fragment-matches (fragment-conformations-map)
-  (let ((*print-pretty* nil))
+  (error "Implement me")
+  #+(or)(let ((*print-pretty* nil))
     (maphash (lambda (key value)
                (let ((before-monomer-context (aref (topology:monomer-contexts-vector fragment-conformations-map) (topology:fragment-match-key-before-monomer-context-index key)))
                      (after-monomer-context (aref (topology:monomer-contexts-vector fragment-conformations-map) (topology:fragment-match-key-after-monomer-context-index key))))
                  (format t "~s ~s ~a~%" before-monomer-context after-monomer-context value)))
              (topology:missing-fragment-matches fragment-conformations-map))))
+
+
+(defun foldamer-eliminate-missing-fragment-matches (fragment-conformations-map foldamer &key verbose)
+  (let ((monomer-contexts-maybe-missing-after-fragments (make-hash-table :test 'equal)))
+    ;; Add every monomer context to the hash-table
+    (maphash (lambda (key value)
+               (setf (gethash key monomer-contexts-maybe-missing-after-fragments) nil))
+             (topology:monomer-context-to-fragment-conformations fragment-conformations-map))
+    ;; Then update the ones that need fragments removed
+    (maphash (lambda (key value)
+               (let* ((before-monomer-context (car key))
+                      (after-monomer-context (cdr key)))
+                 (loop for vec across value
+                       for index from 0
+                       when (= (length vec) 0)
+                         do (pushnew index (gethash before-monomer-context monomer-contexts-maybe-missing-after-fragments nil)))))
+             (topology:fragment-matches fragment-conformations-map))
+    ;; Prune the ones that need to be removed
+    (let ((pruned-monomer-context-to-fragment-conformations (make-hash-table :test 'equal)))
+      (maphash (lambda (monomer-context value)
+                 (let ((fragment-conformations (gethash monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
+                       (pruned-fragments (make-array 16 :adjustable t :fill-pointer 0)))
+                   (loop for index below (length (topology:fragments fragment-conformations))
+                         unless (member index value)
+                           do (vector-push-extend (elt (topology:fragments fragment-conformations) index) pruned-fragments))
+                   (let ((pruned-fragment-conformations (make-instance 'topology:fragment-conformations
+                                                                       :focus-monomer-name (topology:focus-monomer-name fragment-conformations)
+                                                                       :monomer-context monomer-context
+                                                                       :total-count (topology:total-count fragment-conformations)
+                                                                       :fragments pruned-fragments)))
+                     (setf (gethash monomer-context pruned-monomer-context-to-fragment-conformations)
+                           pruned-fragment-conformations))))
+               monomer-contexts-maybe-missing-after-fragments)
+      ;; Return a new fragment-conformations-map
+      (foldamer:optimize-fragment-conformations-map
+       (make-instance 'topology:fragment-conformations-map
+                      :monomer-context-to-fragment-conformations pruned-monomer-context-to-fragment-conformations)
+       foldamer verbose)
+      )))
+
 
 (defun dump-internals (message internals &optional compare)
   (format t "~a~%" message)
@@ -191,36 +236,48 @@
              (format t "~%"))))
              
 
+(defun foldamer-describe-match (fragment-conformations-map before-monomer-context after-monomer-context)
+  (let* ((match-key (cons before-monomer-context after-monomer-context))
+         (match-vec (gethash match-key (topology:fragment-matches fragment-conformations-map))))
+    (format t "match-key ~a~%" match-key)
+    (maphash (lambda (key value)
+               (when (and (string= (car key) before-monomer-context)
+                          (string= (cdr key) after-monomer-context))
+                 (format t "found ~a~%" value)))
+             (topology:fragment-matches fragment-conformations-map))
+    (format t "match-vec = ~s~%" match-vec)))
+
 (defun foldamer-describe-missing-match (fragment-conformations-map before-monomer-context after-monomer-context &optional before-fragment-index after-monomer)
-  (let* ((before-monomer-context-index (gethash before-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
-         (after-monomer-context-index (gethash after-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
-         (match-key (topology:make-fragment-match-key
-                     :before-monomer-context-index before-monomer-context-index
-                     :after-monomer-context-index after-monomer-context-index))
-         (missing-match-vec (gethash match-key (topology:missing-fragment-matches fragment-conformations-map))))
-    (cond
-      ((null before-fragment-index)
-       (format t "vec ~a~%" missing-match-vec))
-      ((null after-monomer)
-       (let* ((fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
-              (fragment-conformation (elt (topology:fragments fragment-conformations) before-fragment-index))
-              (out-of-focus (topology:out-of-focus-internals fragment-conformation)))
-         (maphash (lambda (key value)
-                    (format t "following monomer ~s ~s~%" key value))
-                  out-of-focus)))
-      (t 
-       (let* ((fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
-              (fragment-conformation (elt (topology:fragments fragment-conformations) before-fragment-index))
-              (out-of-focus (topology:out-of-focus-internals fragment-conformation))
-              (out-of-focus-internals (gethash after-monomer out-of-focus)))
-         (if out-of-focus-internals
-             (progn
-               (dump-internals "before internals" out-of-focus-internals)
-               (loop with after-fragment-conformations = (gethash after-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map))
-                     for after-fragment-index below (length (topology:fragments after-fragment-conformations))
-                     for after-fragment-conformation = (elt (topology:fragments after-fragment-conformations) after-fragment-index)
-                     for after-internals = (topology:internals after-fragment-conformation)
-                     do (dump-internals (format nil "after internals #~a" after-fragment-index) after-internals out-of-focus-internals)))))))))
+  (error "Implement me")
+  #+(or)(let* ((before-monomer-context-index (gethash before-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
+               (after-monomer-context-index (gethash after-monomer-context (topology:monomer-context-index-map fragment-conformations-map)))
+               (match-key (topology:make-fragment-match-key
+                           :before-monomer-context-index before-monomer-context-index
+                           :after-monomer-context-index after-monomer-context-index))
+               (missing-match-vec (gethash match-key (topology:missing-fragment-matches fragment-conformations-map))))
+          (cond
+            ((null before-fragment-index)
+             (format t "vec ~a~%" missing-match-vec))
+            ((null after-monomer)
+             (let* ((fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
+                    (fragment-conformation (elt (topology:fragments fragment-conformations) before-fragment-index))
+                    (out-of-focus (topology:out-of-focus-internals fragment-conformation)))
+               (maphash (lambda (key value)
+                          (format t "following monomer ~s ~s~%" key value))
+                        out-of-focus)))
+            (t 
+             (let* ((fragment-conformations (gethash before-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map)))
+                    (fragment-conformation (elt (topology:fragments fragment-conformations) before-fragment-index))
+                    (out-of-focus (topology:out-of-focus-internals fragment-conformation))
+                    (out-of-focus-internals (gethash after-monomer out-of-focus)))
+               (if out-of-focus-internals
+                   (progn
+                     (dump-internals "before internals" out-of-focus-internals)
+                     (loop with after-fragment-conformations = (gethash after-monomer-context (topology:monomer-context-to-fragment-conformations fragment-conformations-map))
+                           for after-fragment-index below (length (topology:fragments after-fragment-conformations))
+                           for after-fragment-conformation = (elt (topology:fragments after-fragment-conformations) after-fragment-index)
+                           for after-internals = (topology:internals after-fragment-conformation)
+                           do (dump-internals (format nil "after internals #~a" after-fragment-index) after-internals out-of-focus-internals)))))))))
 
 (defun foldamer-check-conformations (&optional (path #P"./") spiros)
   (format t "checking conformations~%")

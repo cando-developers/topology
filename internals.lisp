@@ -85,17 +85,9 @@
    (print-unreadable-object (obj stream :type t))))
 
 (defclass matched-fragment-conformations-map (fragment-conformations-map)
-  ((missing-fragment-matches :initform (make-hash-table :test 'equalp)
-                             :initarg :missing-fragment-matches
-                             :accessor missing-fragment-matches)
-   (fragment-matches :initform (make-hash-table :test 'equalp)
+  ((fragment-matches :initform (make-hash-table :test 'equalp)
                      :initarg :fragment-matches
-                     :accessor fragment-matches)
-   (monomer-context-index-map :initform (make-hash-table :test 'equal)
-                     :initarg :monomer-context-index-map
-                     :accessor monomer-context-index-map)
-   (monomer-contexts-vector :initarg :monomer-contexts-vector
-                     :accessor monomer-contexts-vector)))
+                     :accessor fragment-matches)))
 
 (cando:make-class-save-load matched-fragment-conformations-map)
 
@@ -112,19 +104,22 @@
                (incf matching-fragment-conformations (length value)))
              (fragment-matches matched-fragment-conformations-map))
     (maphash (lambda (key value)
-               (declare (ignore key))
-               (incf missing-fragment-conformations (length value)))
-             (missing-fragment-matches matched-fragment-conformations-map))
-    (values total-fragment-conformations matching-fragment-conformations missing-fragment-conformations)))
-
-(defstruct fragment-match-key
-  before-monomer-context-index
-  after-monomer-context-index)
-
-(defstruct missing-fragment-match
-  before-monomer-context
-  after-monomer-context
-  before-fragment-conformation-index)
+               (declare (ignorable key))
+               (loop for val across value
+                     when (= (length val) 0)
+                       do (incf missing-fragment-conformations)))
+             (fragment-matches matched-fragment-conformations-map))
+    (let ((missing-monomer-contexts nil))
+      (maphash (lambda (monomer-context fragment-conformations)
+                 (block inner-search
+                   (maphash (lambda (monomer-context-pair allowed-fragment-indices)
+                              (when (or (string= (car monomer-context-pair) monomer-context)
+                                        (string= (cdr monomer-context-pair) monomer-context))
+                                (return-from inner-search nil)))
+                            (fragment-matches matched-fragment-conformations-map))
+                   (push monomer-context missing-monomer-contexts)))
+               (monomer-context-to-fragment-conformations matched-fragment-conformations-map))
+      (values total-fragment-conformations matching-fragment-conformations missing-fragment-conformations missing-monomer-contexts))))
 
 (defconstant +dihedral-threshold+ (* 10.0 0.0174533))
 

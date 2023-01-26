@@ -92,44 +92,32 @@ Specialize the foldamer argument to provide methods"))
                                (declare (ignore atom-id))
                                (kin:set-position joint (geom:vec 0.0 0.0 0.0))))))
 
-#|
-(defun fill-internals-from-random-fragments (conf fragments &optional (index 0))
+(defun fill-internals-from-oligomer-shape (conf fragments oligomer-shape)
   "Fill internal coordinates from the fragments"
   (loop with atagg = (ataggregate conf)
         with atmol = (elt (atmolecules atagg) 0)
-        with previous-monomer-context = nil
-        with previous-monomer-context-index = 0
-        with previous-monomer-context-index = 0
         for monomer in (ordered-monomers (oligomer conf))
         for monomer-context = (gethash monomer (monomer-contexts conf))
-        for frags = (gethash monomer-context (monomer-context-to-fragment-conformations fragments))
+        for fragment-conformations = (gethash monomer-context (monomer-context-to-fragment-conformations fragments))
         for monomer-index = (gethash monomer (monomer-positions conf))
         for atres = (elt (atresidues atmol) monomer-index)
-        for fragment-conformations = (let ((fp (gethash monomer-context (monomer-context-to-fragment-conformations fragments))))
-                              (unless fp
-                                (error "Cannot find context ~a in conformations" monomer-context))
-                              fp)
-        for rand-limit = (length (fragments fragment-conformations))
-        for rand-index = (if index index (random rand-limit))
+        for monomer-shape = (gethash monomer (monomer-shape-map oligomer-shape))
+        for fragment-conformation-index = (fragment-conformation-index monomer-shape)
         for fragment-internals = (let ((fragments (fragments fragment-conformations)))
                                    (unless fragments
                                      (error "fragments is NIL for context ~a" monomer-context))
-                                   (elt (fragments fragment-conformations) rand-index))
+                                   (elt (fragments fragment-conformations) fragment-conformation-index))
         do (loop for joint across (joints atres)
-                 for internal in (internals fragment-internals)
+                 for internal across (internals fragment-internals)
                  do (fill-joint-internals joint internal))
-        do previous-monomer-context = monomer-context
-        do previous-monomer-context-index = monomer-context-index
-        do previous-fragment-internals-index = fragment-internals-index
         ))
-|#
 
 
 
-(defun build-shape (oligomer-space fragment-conformations)
-  (let* ((oligomer (topology:make-oligomer oligomer-space 0))
+(defun build-shape (oligomer-shape fragment-conformations)
+  (let* ((oligomer (oligomer oligomer-shape))
          (conf (topology:make-conformation oligomer)))
-    (topology::fill-internals-from-fragments conf fragment-conformations)
+    (topology::fill-internals-from-oligomer-shape conf fragment-conformations oligomer-shape)
     (topology:zero-all-atom-tree-external-coordinates conf)
     (topology:build-all-atom-tree-external-coordinates conf)
     (topology:copy-joint-positions-into-atoms conf)
