@@ -659,7 +659,7 @@ We need these to match fragment internals with each other later."
   (let ((used-contexts-set (make-hash-table :test 'equal)))
     (loop for monomer across (topology:monomers oligomer-space)
           for monomer-context = (topology:foldamer-monomer-context monomer oligomer-space foldamer)
-          do (format t "monomer-context = ~s~%" monomer-context)
+          do (when print (format t "monomer-context = ~s~%" monomer-context))
           do (setf (gethash monomer-context used-contexts-set) t)
           if monomer-context
             do (when print

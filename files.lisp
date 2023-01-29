@@ -85,6 +85,7 @@
   ((trainer-context :initarg :trainer-context :reader trainer-context)
    (number-of-atoms :initarg :number-of-atoms :reader number-of-atoms)
    (node-index :initarg :node-index :reader node-index)
+   (job-index :initarg :job-index :reader job-index)
    ))
 
 (cando:make-class-save-load
@@ -92,34 +93,40 @@
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
-     (format stream "~a ~a" (trainer-context obj) (number-of-atoms obj)))))
+     (format stream "~a :num-atoms ~a :node ~a :job ~a" (trainer-context obj) (number-of-atoms obj)
+             (node-index obj) (job-index obj)))))
 
 (defun foldamer-setup (spiros
-		       &key
-		       (nodes 12)
-		       (clasp "$CLASP -l code.lisp")
-		       (script "jobs.dat")
-		       (finished-steps 2 finished-steps-p)
-		       (advance-steps 10 advance-steps-p))
+                       &key
+                         (jobs 1)
+                         (nodes-per-job 12)
+                         (threads-per-node 28)
+                         (clasp "$CLASP -l code.lisp")
+                         (script "jobs")
+                         (finished-steps 2 finished-steps-p)
+                         (advance-steps 10 advance-steps-p))
+  (format t "Updating trainers~%")
   (foldamer-update-trainers spiros :remove-unused t)
   (let* ((max-finished-steps (max-finished-steps spiros))
          (steps (cond
-		 ((and (null advance-steps-p) finished-steps-p) finished-steps)
-		 ((and (null finished-steps-p) advance-steps-p) (+ max-finished-steps advance-steps))
-		 ((and (null finished-steps-p) (null advance-steps-p))
-		  max-finished-steps)
-		 (t (error "You must provide only one option advance-steps or finished-steps or neither"))))
-         (trainer-contexts (foldamer:valid-trainer-contexts spiros))
-         (node-total nodes)
-	 (jobs-per-node (ceiling (length trainer-contexts) node-total))
+                  ((and (null advance-steps-p) finished-steps-p) finished-steps)
+                  ((and (null finished-steps-p) advance-steps-p) (+ max-finished-steps advance-steps))
+                  ((and (null finished-steps-p) (null advance-steps-p))
+                   max-finished-steps)
+                  (t (error "You must provide only one option advance-steps or finished-steps or neither"))))
+         (trainer-contexts (progn
+                             (format t "Calculating valid trainer contexts~%")
+                             (foldamer:valid-trainer-contexts spiros)))
+         (total-nodes (* jobs nodes-per-job)) 
+         (threads-per-node (ceiling (length trainer-contexts) nodes-per-job))
          (node-work (make-hash-table :test 'eql))
          (trainer-count 0)
          (unsorted-trainers-that-need-work (loop for trainer-context in trainer-contexts
-						 when (needs-work trainer-context steps)
-						 collect (let* ((oligomer (find-oligomer-for-monomer-context spiros trainer-context))
-								(molecule (topology:build-molecule oligomer))
-								(number-of-atoms (chem:number-of-atoms molecule)))
-							   (cons number-of-atoms trainer-context))))
+                                                 when (needs-work trainer-context steps)
+                                                   collect (let* ((oligomer (find-oligomer-for-monomer-context spiros trainer-context))
+                                                                  (molecule (topology:build-molecule oligomer))
+                                                                  (number-of-atoms (chem:number-of-atoms molecule)))
+                                                             (cons number-of-atoms trainer-context))))
          (trainers-that-need-work (sort unsorted-trainers-that-need-work #'< :key #'car)))
     ;; Note: Sort order is reverse of what we want because below we push the trainer-context into list
     (format t "Maximum finished-steps ~a~%" max-finished-steps)
@@ -128,29 +135,33 @@
           for number-of-atoms = (car pair)
           for trainer-file = (cdr pair)
           for index from 0
-          for node-index = (mod index node-total)
+          for node-index = (mod index total-nodes)
+          for job-index = (mod index jobs)
           for trainer-context = (pathname-name (pathname trainer-file))
           do (progn
                #+(or)(format t "number-of-atoms ~a node-index ~a~%" number-of-atoms node-index)
                (let ((trainer-job (make-instance 'trainer-job
                                                  :trainer-context trainer-context
                                                  :number-of-atoms number-of-atoms
-                                                 :node-index node-index)))
+                                                 :node-index node-index
+                                                 :job-index job-index)))
                  (push trainer-job (gethash node-index node-work nil))
-                 (format t "trainer-job ~a~%" trainer-job))
+                 (format t "trainer-job:  ~a~%" trainer-job))
                (incf trainer-count)
                (when (gethash node-index node-work)
                  #+(or)(format t "~a ~a~%" node-index trainer-context))))
-    (with-open-file (fout script :direction :output :if-exists :supersede)
-		    (loop for node-index below (min jobs-per-node (hash-table-count node-work))
-			  do (format fout "~a -e \"(foldamer:foldamer-run-node ~a :steps ~a)\"~%"
-				     clasp
-				     node-index
-				     steps)))
+    (loop for job below jobs
+          for script-filename = (make-pathname :name (format nil "~a~a" script job) :type "job")
+          do (with-open-file (fout script-filename :direction :output :if-exists :supersede)
+               (loop for node-index below (min threads-per-node (hash-table-count node-work))
+                     do (format fout "~a -e \"(foldamer:foldamer-run-node ~a :steps ~a)\"~%"
+                                clasp
+                                node-index
+                                steps))))
     (cando:save-cando node-work "node-work.cando")
     (format t "~a trainers need to be trained~%" (if (= trainer-count 0) "No" trainer-count))
     )
-  (sys:quit))
+    (sys:quit))
 
 
 
@@ -160,14 +171,17 @@
     (format t "Total fragments:    ~8d~%" fragment-total)
     (format t "Matching fragments: ~8d~%" matched-fragments-total)
     (format t "Missing matches:    ~8d~%" missing-matches-total)
-    (format t "Fraction missing:   ~8,5f~%" (float (/ missing-matches-total (+ missing-matches-total matched-fragments-total))))))
+    (format t "Fraction missing:   ~8,5f~%" (float (/ missing-matches-total (+ missing-matches-total matched-fragments-total))))
+    missing-matches-total))
 
 (defun foldamer-extract-conformations (&key (path #P"./conformations.cando") spiros verbose)
   (format t "Extracting conformations for the path: ~a~%" path)
   (let ((foldamer-conformations-map (foldamer:extract-fragment-conformations-map path)))
     (format t "Matching fragment conformations~%")
     (let ((matched (foldamer:optimize-fragment-conformations-map foldamer-conformations-map spiros verbose)))
-      (foldamer-report-conformations matched)
+      (loop while (> (foldamer-report-conformations matched) 0)
+            do (format t "Eliminating missing matches~%")
+            do (setf matched (foldamer-eliminate-missing-fragment-matches matched spiros)))
       (format t "Saving ~a~%" path)
       (cando:save-cando matched path)
       )))
