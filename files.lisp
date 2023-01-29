@@ -83,7 +83,7 @@
 
 (defclass trainer-job ()
   ((trainer-context :initarg :trainer-context :reader trainer-context)
-   (number-of-atoms :initarg :number-of-atoms :reader number-of-atoms)
+   (cost :initarg :cost :reader cost)
    (node-index :initarg :node-index :reader node-index)
    (job-index :initarg :job-index :reader job-index)
    ))
@@ -93,7 +93,7 @@
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
-     (format stream "~a :num-atoms ~a :node ~a :job ~a" (trainer-context obj) (number-of-atoms obj)
+     (format stream "~a :cost ~a :node ~a :job ~a" (trainer-context obj) (cost obj)
              (node-index obj) (job-index obj)))))
 
 (defun foldamer-setup (spiros
@@ -120,48 +120,60 @@
          (total-nodes (* jobs nodes-per-job)) 
          (threads-per-node (ceiling (length trainer-contexts) nodes-per-job))
          (node-work (make-hash-table :test 'eql))
+         (job-nodes (make-hash-table :test 'eql))
          (trainer-count 0)
+         (monomer-context-to-oligomer-map (monomer-context-to-oligomer-map spiros))
          (unsorted-trainers-that-need-work (loop for trainer-context in trainer-contexts
                                                  when (needs-work trainer-context steps)
-                                                   collect (let* ((oligomer (find-oligomer-for-monomer-context spiros trainer-context))
-                                                                  (molecule (topology:build-molecule oligomer))
-                                                                  (number-of-atoms (chem:number-of-atoms molecule)))
-                                                             (cons number-of-atoms trainer-context))))
+                                                   collect (let* ((oligomer (gethash trainer-context monomer-context-to-oligomer-map))
+                                                                  (number-of-monomers (length (topology:monomers oligomer)))
+                                                                  #+(or)(molecule (topology:build-molecule oligomer))
+                                                                  #+(or)(cost (chem:cost molecule)))
+                                                             (cons number-of-monomers trainer-context))))
          (trainers-that-need-work (sort unsorted-trainers-that-need-work #'< :key #'car)))
     ;; Note: Sort order is reverse of what we want because below we push the trainer-context into list
     (format t "Maximum finished-steps ~a~%" max-finished-steps)
     (format t "New steps              ~a~%" steps)
     (loop for pair in trainers-that-need-work
-          for number-of-atoms = (car pair)
+          for cost = (car pair)
           for trainer-file = (cdr pair)
           for index from 0
           for node-index = (mod index total-nodes)
-          for job-index = (mod index jobs)
+          for job-index = (floor node-index nodes-per-job)
           for trainer-context = (pathname-name (pathname trainer-file))
           do (progn
-               #+(or)(format t "number-of-atoms ~a node-index ~a~%" number-of-atoms node-index)
+               #+(or)(format t "cost ~a node-index ~a~%" cost node-index)
                (let ((trainer-job (make-instance 'trainer-job
                                                  :trainer-context trainer-context
-                                                 :number-of-atoms number-of-atoms
+                                                 :cost cost
                                                  :node-index node-index
                                                  :job-index job-index)))
                  (push trainer-job (gethash node-index node-work nil))
+                 (pushnew node-index (gethash job-index job-nodes nil))
                  (format t "trainer-job:  ~a~%" trainer-job))
                (incf trainer-count)
                (when (gethash node-index node-work)
                  #+(or)(format t "~a ~a~%" node-index trainer-context))))
-    (loop for job below jobs
-          for script-filename = (make-pathname :name (format nil "~a~a" script job) :type "job")
-          do (with-open-file (fout script-filename :direction :output :if-exists :supersede)
-               (loop for node-index below (min threads-per-node (hash-table-count node-work))
-                     do (format fout "~a -e \"(foldamer:foldamer-run-node ~a :steps ~a)\"~%"
-                                clasp
-                                node-index
-                                steps))))
     (cando:save-cando node-work "node-work.cando")
-    (format t "~a trainers need to be trained~%" (if (= trainer-count 0) "No" trainer-count))
-    )
-    (sys:quit))
+    (let ((job-files (make-array jobs
+                                 :initial-contents (loop for fi below jobs
+                                                         collect (open (make-pathname :name (format nil "~a~a" script fi) :type "job")
+                                                                       :direction :output
+                                                                       :if-exists :supersede :if-does-not-exist :create)))))
+      (maphash (lambda (job-index node-indexes)
+                 (let ((fout (aref job-files job-index)))
+                   (format t "Job: ~a   node-indexes: ~a~%" job-index node-indexes)
+                   (loop for node-index in (sort node-indexes #'<)
+                         do (format fout "~a -e \"(foldamer:foldamer-run-node ~a :steps ~a)\"~%"
+                                    clasp
+                                    node-index
+                                    steps))))
+               job-nodes)
+      (format t "~a trainers need to be trained~%" (if (= trainer-count 0) "No" trainer-count))
+      (loop for fi below jobs
+            for fout across job-files
+            do (close fout))))
+  (sys:quit))
 
 
 

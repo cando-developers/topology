@@ -201,4 +201,5 @@
    #:monomer-contents-vector
    #:foldamer-describe-missing-match
    #:angle-difference
-   #:monomer-context))
+   #:monomer-context
+   #:monomer-context-to-oligomer-map))

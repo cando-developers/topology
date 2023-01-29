@@ -232,6 +232,21 @@
             foldamer))))
 
 
+(defun monomer-context-to-oligomer-map (foldamer)
+  (let ((map (make-hash-table :test 'equal))
+        (training-spaces (training-oligomer-spaces foldamer)))
+    (loop for training-space in training-spaces
+          for oligomer-space = (oligomer-space training-space)
+          for focus-monomer = (focus-monomer training-space)
+          for monomer-context-matcher = (monomer-context-matcher training-space)
+          for num-sequences = (topology:number-of-sequences oligomer-space)
+          do (loop for num-seq below num-sequences
+                   for oligomer = (topology:make-oligomer oligomer-space num-seq)
+                   for match = (monomer-context:match monomer-context-matcher focus-monomer oligomer)
+                   for trainer-context = (monomer-context:match-as-string match)
+                   do (setf (gethash trainer-context map) oligomer)))
+    map))
+
 (defun find-oligomer-for-monomer-context (foldamer monomer-context)
   (let ((training-spaces (training-oligomer-spaces foldamer)))
     (loop for training-space in training-spaces
