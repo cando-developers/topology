@@ -547,7 +547,7 @@ We need these to match fragment internals with each other later."
                                                      (format flog "Ignoring conformation ~a - seen before at ~a~%" total-count seen-index)
                                                      (topology:dump-fragment-internals fragment-internals flog)))
                                                (progn
-                                                 (push (cons "status" "ignoring conformation - failed (null (topology:bad-fragment-internals fragment-internals)): ~a") data-items bad-fragment-internals)
+                                                 (push (cons "status" (format nil "ignoring conformation - failed (null (topology:bad-fragment-internals fragment-internals)): ~a" bad-fragment-internals)) data-items )
                                                  (format flog "Ignoring conformation ~a - failed (null (topology:bad-fragment-internals fragment-internals))~%" total-count)
                                                  (topology:dump-fragment-internals fragment-internals flog))))))
                                      (progn
