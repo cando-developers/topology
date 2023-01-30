@@ -515,10 +515,7 @@ We need these to match fragment internals with each other later."
                                                               (invoke-restart 'cando:save-and-skip-rest-of-minimization save-filename)
                                                               (return-from once nil))))
                                     (smirnoff:missing-dihedral (lambda (err)
-                                                                 (let ((save-filename (make-pathname :type "cando" :defaults flog)))
-                                                                   (format flog "Missing dihedral ~a - saving molecule to ~s~%" err save-filename)
-                                                                   (cando:save-cando (smirnoff:molecule err) save-filename))
-                                                                 (signal err))))
+                                                                 (format flog "Missing dihedral ~a~%" err))))
                                  (progn
                                    (cando:starting-geometry-with-restarts agg :verbose verbose)))
                                (format flog "Found a starting geometry for total-count: ~a~%" total-count)
