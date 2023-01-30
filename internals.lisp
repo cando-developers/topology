@@ -141,16 +141,18 @@
   nil)
 
 
-(defun good-fragment-internals (fragment-internals)
+(defun bad-fragment-internals (fragment-internals)
   (loop for internal across (internals fragment-internals)
+        with previous-internal
         do (cond
-             ((typep internal 'jump-internal))
-             ((> (bond internal) 1.8)
-              (return-from good-fragment-internals nil))
-             ))
-  t)
-
-
+             ((typep internal 'jump-internal) nil)
+             ((> (bond internal) 3.0)
+              (return-from bad-fragment-internals
+                (if previous-internal
+                    (format nil "For atom ~a to ~a bad (bond internal) 3.0 .lt. ~7,2f" (name internal) (name previous-internal) (bond internal))
+                    (format nil "For atom ~a bad (bond internal) 3.0 .lt. ~7,2f" (name internal) (bond internal))))))
+        do (setf previous-internal internal))
+  nil)
 
 (defun save-fragment-conformations (fragment-conformations filename)
   (cando:save-cando fragment-conformations filename))

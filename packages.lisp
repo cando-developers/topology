@@ -55,7 +55,7 @@
    #:ordered-monomers
 
    #:seen-fragment-internals
-   #:good-fragment-internals
+   #:bad-fragment-internals
    #:load-fragment-conformations
    #:fragment-conformations
    #:fragment-internals
