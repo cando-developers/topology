@@ -96,6 +96,20 @@
      (format stream "~a :cost ~a :node ~a :job ~a" (trainer-context obj) (cost obj)
              (node-index obj) (job-index obj)))))
 
+
+(defun verify-all-training-molecules-can-be-parameterized (spiros)
+  "Build every training oligomer and generate an energy function for it to make sure that all training molecules can be parameterized"
+  (foldamer:load-force-field t)
+  (let* ((trainer-contexts (progn
+                             (format t "Calculating valid trainer contexts~%")
+                             (foldamer:valid-trainer-contexts spiros)))
+         (monomer-context-to-oligomer-map (monomer-context-to-oligomer-map spiros)))
+    (loop for trainer-context in trainer-contexts
+          for oligomer = (gethash trainer-context monomer-context-to-oligomer-map)
+          for agg = (topology:build-molecule oligomer)
+          do (format t "trainer-context ~a~%" trainer-context)
+          do (chem:make-energy-function :matter agg))))
+
 (defun foldamer-setup (spiros
                        &key
                          (jobs 1)
@@ -322,7 +336,7 @@
 
 (defun foldamer-run-node (node-index &key (steps 2) testing (parallel t) (no-fail t))
   (format t "Loading force-field~%")
-  (foldamer:prepare-to-build-trainer :smirnoff "./force-field.offxml")
+  (foldamer:load-force-field t)
   (let* ((all-node-work (cando:load-cando "node-work.cando"))
          (node-trainers (gethash node-index all-node-work))
          (foldamer-dat-pathname (merge-pathnames #P"./foldamer.dat"))

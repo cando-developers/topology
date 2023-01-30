@@ -549,8 +549,8 @@ We need these to match fragment internals with each other later."
                                                (format flog "Ignoring conformation ~a - failed (topology:good-fragment-internals fragment-internals)~%" total-count)
                                                (topology:dump-fragment-internals fragment-internals flog)))))
                                      (progn
-                                       (push (cons "status" (format nil "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a~%problem: ~a~%" total-count maybe-bad-geometry)) data-items)
-                                       (format flog "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a~%problem: ~a~%" total-count maybe-bad-geometry)))
+                                       (push (cons "status" (format nil "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a  ~a~%" total-count maybe-bad-geometry)) data-items)
+                                       (format flog "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a  ~a~%" total-count maybe-bad-geometry)))
                                  (sdf:write-sdf-stream agg fsdf :name trainer-context :data-items (list* (cons "total-count index" total-count) data-items)))
                                (incf total-count)))))
                 (setf (topology:total-count fragment-conformations) total-count)
@@ -568,8 +568,7 @@ We need these to match fragment internals with each other later."
                     (format fout ")~%")))))))))))
 
 
-(defun prepare-to-build-trainer (&key (smirnoff #P"~/Development/openff-sage/inputs-and-results/optimizations/vdw-v1/forcefield/force-field.offxml" ))
-  (leap:load-smirnoff-params smirnoff))
+(defgeneric load-force-field (force-field))
 
 (defun extract-fragment-conformations-map (filename &key (parallel nil))
   "Parallel version is slower than serial because of false sharing in GC"

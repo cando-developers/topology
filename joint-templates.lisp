@@ -236,3 +236,100 @@
     (when parent-joint (kin:joint/add-child parent-joint joint))
     joint))
 
+(defclass topology-graph ()
+  ((topology :initarg :topology :reader topology)
+   (nodes :initarg :nodes :reader nodes)
+   (nodes-to-ids :initarg :nodes-to-ids :reader nodes-to-ids)
+   (names-to-nodes :initarg :names-to-nodes :reader names-to-nodes)
+   (undirected-edges :initarg :undirected-edges :reader undirected-edges)))
+
+(defclass topology-edge ()
+  ((from :initarg :from :reader from)
+   (to :initarg :to :reader to)
+   (label :initarg :label :initform nil :reader label)))
+
+(defmethod topology.graphviz:make-graph ((obj topology:topology))
+  (let* ((nodes (labels ((accumulate-nodes (joint-template)
+                           (list* joint-template
+                                  (loop for child in (topology:children joint-template)
+                                        append (accumulate-nodes child)))))
+                  (accumulate-nodes (topology::joint-template obj))))
+         (nodes-to-ids (make-hash-table))
+         (names-to-nodes (make-hash-table)))
+    (loop for node in nodes
+          do (setf (gethash node nodes-to-ids) (gensym))
+          do (setf (gethash (atom-name node) names-to-nodes) node))
+    (let* ((constitution (topology:constitution obj))
+           (constitution-atoms (topology:constitution-atoms constitution))
+           (constitution-bond-edges nil))
+      (loop for catom across constitution-atoms
+            for cbond-from-index from 0
+            for from-atom-name = (atom-name catom)
+            do (loop for cbond in (topology:bonds catom)
+                     for cbond-to-index = (topology:to-atom-index cbond)
+                     for catom-to = (aref constitution-atoms cbond-to-index)
+                     for to-atom-name = (atom-name catom-to)
+                     when (< cbond-from-index cbond-to-index)
+                       do (let ((edge (make-instance 'topology-edge
+                                                     :from from-atom-name
+                                                     :to to-atom-name
+                                                     :label (case (order cbond)
+                                                              (:single-bond nil)
+                                                              (:double-bond "=")
+                                                              (otherwise (string (order cbond)))))))
+                            (push edge constitution-bond-edges))))
+      (make-instance 'topology-graph
+                     :topology obj
+                     :nodes nodes
+                     :nodes-to-ids nodes-to-ids
+                     :names-to-nodes names-to-nodes
+                     :undirected-edges constitution-bond-edges
+                     ))))
+
+(defmethod topology.graphviz:graph-label ((graph topology-graph))
+  (string (name (topology graph))))
+
+(defmethod topology.graphviz:graph-name ((graph topology-graph))
+  (string (name (topology graph))))
+
+(defmethod topology.graphviz:nodes ((obj topology-graph))
+  (nodes obj))
+
+(defmethod topology.graphviz:node-label ((node topology:joint-template) graph)
+  (declare (ignore graph))
+  (format nil "~a" (symbol-name (topology::atom-name node))))
+
+(defmethod topology.graphviz:node-id ((node topology:joint-template) graph)
+  (format nil "~a" (symbol-name (gethash node (nodes-to-ids graph)))))
+
+
+(defmethod topology.graphviz:directed-edges ((obj topology-graph))
+  (labels ((accumulate-directed-edges (node)
+             (loop for child in (children node)
+                   append (list*
+                            (make-instance 'topology-edge
+                                           :from node
+                                           :to child)
+                            (accumulate-directed-edges child)))))
+    (accumulate-directed-edges (joint-template (topology obj)))))
+
+(defmethod topology.graphviz:directed-edge-from (edge) (from edge))
+(defmethod topology.graphviz:directed-edge-to (edge) (to edge))
+(defmethod topology.graphviz:directed-edge-label (edge) (declare (ignore edge)) nil)
+
+(defmethod topology.graphviz:undirected-edges ((obj topology-graph))
+  (undirected-edges obj))
+
+(defmethod topology.graphviz:undirected-edge-from (edge (graph topology-graph))
+  (let ((node (gethash (from edge) (names-to-nodes graph))))
+    node))
+(defmethod topology.graphviz:undirected-edge-to (edge (graph topology-graph))
+  (let ((node (gethash (to edge) (names-to-nodes graph))))
+    node))
+
+(defmethod topology.graphviz:undirected-edge-label (edge (graph topology-graph))
+  (declare (ignore graph))
+  (label edge))
+
+
+

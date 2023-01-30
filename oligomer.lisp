@@ -54,6 +54,19 @@
           do (chem:add-restraint residue rr))
     residue))
 
+(defun build-one-molecule-for-topology (topology)
+  "Debugging function - return a molecule that contains a single residue built from topology."
+  (let ((residue (build-residue-for-monomer-name topology (name topology)))
+        (mol (chem:make-molecule (name topology))))
+    (chem:add-matter mol residue)
+    mol))
+
+(defun sketch-svg (topology &rest args)
+  "Generate an svg sketch of the topology - send args to sketch2d"
+  (let ((mol (build-one-molecule-for-topology topology)))
+    (sketch2d:svg (apply 'sketch2d:sketch2d mol args))))
+
+
 (defun root-monomer (oligomer)
   (loop for index below (length (monomers oligomer))
         for monomer = (elt (monomers oligomer) index)

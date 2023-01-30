@@ -157,7 +157,8 @@
    #:root-monomer
    #:random-fragment-conformation-index
    #:make-oligomer-shape
-   ))
+   #:build-one-molecule-for-topology
+   #:sketch-svg))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -202,4 +203,32 @@
    #:foldamer-describe-missing-match
    #:angle-difference
    #:monomer-context
-   #:monomer-context-to-oligomer-map))
+   #:monomer-context-to-oligomer-map
+   #:topologys
+
+   #:verify-all-training-molecules-can-be-parameterized
+   #:load-force-field
+   ))
+
+
+(defpackage #:topology.graphviz
+  (:use #:common-lisp)
+  (:nicknames #:topg)
+  (:export
+   #:nodes
+   #:node-label
+   #:directed-edges
+   #:directed-edge-from
+   #:directed-edge-to
+   #:directed-edge-label
+   #:render-dag
+   #:undirected-edges
+   #:undirected-edge-from
+   #:undirected-edge-to
+   #:undirected-edge-label
+   #:graph-label
+   #:graph-name
+   #:render-foldamer-joint-trees
+   #:make-graph
+   #:node-id
+   #:dot-svg-foldamer-joint-trees))
