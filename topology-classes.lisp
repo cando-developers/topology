@@ -375,7 +375,7 @@
 (defun oligomer-space-directional-coupling-iterator-factory (oligomer-space)
   "Return a function that takes an oligomer and returns an
    iterator that iterates over directional couplings in oligomer-space and return (values coupling source-monomer-name target-monomer-name)"
-  (let ((remaining-couplings (loop for coupling across (couplings oligomer-space)
+  (let ((all-couplings (loop for coupling across (couplings oligomer-space)
                                    when (typep coupling 'directional-coupling)
                                      collect coupling))
         (monomer-to-index (let ((ht (make-hash-table)))
@@ -384,18 +384,23 @@
                                   do (setf (gethash monomer ht) index))
                             ht)))
     (lambda (oligomer)
-      (lambda ()
-        "An iterator that returns successive (values coupling source-monomer-name target-monomer-name)"
-        (when remaining-couplings
-          (let* ((coupling (car remaining-couplings))
-                 (source-monomer (source-monomer coupling))
-                 (source-monomer-index (gethash source-monomer monomer-to-index))
-                 (source-monomer-name (elt (monomers source-monomer)
-                                           (elt (monomer-indices oligomer) source-monomer-index)))
-                 (target-monomer (target-monomer coupling))
-                 (target-monomer-index (gethash target-monomer monomer-to-index))
-                 (target-monomer-name (elt (monomers target-monomer)
-                                           (elt (monomer-indices oligomer) target-monomer-index))))
-            (setf remaining-couplings (cdr remaining-couplings))
-            (values coupling source-monomer-name target-monomer-name)))))))
+      "This is a factory lambda that takes an oligomer and returns an iterator that iterates over the directional couplings in the oligomer"
+      (let ((remaining-couplings all-couplings))
+        (lambda ()
+          "An iterator that iterates over couplings in the oligomer-space/oligomer pair.
+              This iterator is closed over an oligomer and it returns the names of monomers in the coupling of the oligomer.
+              Couplings are really part of the oligomer-space and so we can precompute them and use them to iterate over multiple oligomers.
+              Calling the iterator returns successive (values coupling source-monomer-name target-monomer-name)"
+          (when remaining-couplings
+            (let* ((coupling (car remaining-couplings))
+                   (source-monomer (source-monomer coupling))
+                   (source-monomer-index (gethash source-monomer monomer-to-index))
+                   (source-monomer-name (elt (monomers source-monomer)
+                                             (elt (monomer-indices oligomer) source-monomer-index)))
+                   (target-monomer (target-monomer coupling))
+                   (target-monomer-index (gethash target-monomer monomer-to-index))
+                   (target-monomer-name (elt (monomers target-monomer)
+                                             (elt (monomer-indices oligomer) target-monomer-index))))
+              (setf remaining-couplings (cdr remaining-couplings))
+              (values coupling source-monomer-name target-monomer-name))))))))
   

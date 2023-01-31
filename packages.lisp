@@ -212,7 +212,8 @@
 
    #:verify-all-training-molecules-can-be-parameterized
    #:load-force-field
-   ))
+   #:load-foldamer-conformations-map
+   #:save-foldamer-conformations-map))
 
 
 (defpackage #:topology.graphviz

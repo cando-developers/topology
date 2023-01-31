@@ -184,29 +184,30 @@
                                 when (eq (topology:target-monomer coupling) focus-monomer)
                                   do (return-from find-in-coupling coupling))
         when in-coupling
-          append (let* ((in-monomer (topology:source-monomer in-coupling))
-                        (in-monomer-id (topology:id in-monomer)))
-                   (declare (ignore in-monomer-id))
-                   (loop for in-training-oligomer-space in (training-oligomer-spaces foldamer)
-                         for in-oligomer-space = (oligomer-space in-training-oligomer-space)
-                         for in-focus-monomer = (focus-monomer in-training-oligomer-space)
-                         for in-focus-monomer-id = (topology:id in-focus-monomer)
-                         append (loop named find-out-coupling
-                                      for coupling across (topology:couplings in-oligomer-space)
-                                      for out-monomer = (topology:target-monomer coupling)
-                                      for out-monomer-id = (topology:id out-monomer)
-                                      when (and (eq (topology:id (topology:source-monomer coupling)) in-focus-monomer-id)
-                                                (eq (topology:source-plug-name coupling) (topology:source-plug-name in-coupling))
-                                                (eq (topology:target-plug-name coupling) (topology:target-plug-name in-coupling))
-                                                (eq (topology:id (topology:source-monomer coupling))
-                                                    (topology:id (topology:source-monomer in-coupling)))
-                                                (eq (topology:id (topology:target-monomer coupling))
-                                                    (topology:id (topology:target-monomer in-coupling))))
-                                        append (over-matching-oligomers in-training-oligomer-space
-                                                                        training-oligomer-space)
-                                      #+(or)(all-matching-momomer-contexts-in-matching-training-oligomer-space-pairs
-                                             in-training-oligomer-space
-                                             training-oligomer-space))))))
+          append (progn
+                   (let* ((in-monomer (topology:source-monomer in-coupling))
+                          (in-monomer-id (topology:id in-monomer)))
+                     (declare (ignore in-monomer-id))
+                     (loop for in-training-oligomer-space in (training-oligomer-spaces foldamer)
+                           for in-oligomer-space = (oligomer-space in-training-oligomer-space)
+                           for in-focus-monomer = (focus-monomer in-training-oligomer-space)
+                           for in-focus-monomer-id = (topology:id in-focus-monomer)
+                           append (loop named find-out-coupling
+                                        for coupling across (topology:couplings in-oligomer-space)
+                                        for out-monomer = (topology:target-monomer coupling)
+                                        for out-monomer-id = (topology:id out-monomer)
+                                        when (and (eq (topology:id (topology:source-monomer coupling)) in-focus-monomer-id)
+                                                  (eq (topology:source-plug-name coupling) (topology:source-plug-name in-coupling))
+                                                  (eq (topology:target-plug-name coupling) (topology:target-plug-name in-coupling))
+                                                  (eq (topology:id (topology:source-monomer coupling))
+                                                      (topology:id (topology:source-monomer in-coupling)))
+                                                  (eq (topology:id (topology:target-monomer coupling))
+                                                      (topology:id (topology:target-monomer in-coupling))))
+                                          append (over-matching-oligomers in-training-oligomer-space
+                                                                          training-oligomer-space)
+                                        #+(or)(all-matching-momomer-contexts-in-matching-training-oligomer-space-pairs
+                                               in-training-oligomer-space
+                                               training-oligomer-space)))))))
 
 (defun optimize-fragment-conformations-map (simple-fragment-conformations-map foldamer verbose)
   (let ((all-matching-monomer-contexts (all-matching-monomer-contexts foldamer)))
