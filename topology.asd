@@ -5,9 +5,10 @@
   :version "0.0.1"
   :author "Christian Schafmeister <chris.schaf@verizon.net>"
   :licence "LGPL-3.0"
-  :depends-on (:sketch2d)
+  :depends-on (:sketch2d :cl-conspack)
   :serial t
   :components ((:file "packages")
+               (:file "serial")
                (:file "topology-classes")
                (:file "joint-templates")
                (:file "define-topology")

@@ -243,7 +243,7 @@
           do (loop for num-seq below num-sequences
                    for oligomer = (topology:make-oligomer oligomer-space num-seq)
                    for match = (monomer-context:match monomer-context-matcher focus-monomer oligomer)
-                   for trainer-context = (monomer-context:match-as-string match)
+                   for trainer-context = (monomer-context:match-as-symbol match)
                    do (setf (gethash trainer-context map) oligomer)))
     map))
 
@@ -257,7 +257,7 @@
           do (loop for num-seq below num-sequences
                    for oligomer = (topology:make-oligomer oligomer-space num-seq)
                    for match = (monomer-context:match monomer-context-matcher focus-monomer oligomer)
-                   for trainer-context = (monomer-context:match-as-string match)
+                   for trainer-context = (monomer-context:match-as-symbol match)
                    when (string= monomer-context trainer-context)
                      do (return-from find-oligomer-for-monomer-context (values oligomer focus-monomer))))))
 
@@ -275,10 +275,9 @@
       (unless (>= sequence-index number-of-sequences)
         (let* ((oligomer (topology:make-oligomer oligomer-space sequence-index))
                (match (monomer-context:match monomer-context-matcher focus-monomer oligomer))
-               (monomer-context (monomer-context:match-as-string match))
                (focus-monomer-name (topology:oligomer-monomer-name-at-index oligomer focus-monomer-index)))
           (incf sequence-index)
-          (values (- number-of-sequences sequence-index) oligomer monomer-context focus-monomer focus-monomer-name))))))
+          (values (- number-of-sequences sequence-index) oligomer match focus-monomer focus-monomer-name))))))
 
 (defun foldamer-oligomer-monomer-context-focus-monomer-iterator (foldamer)
   "Return an iterator to access all oligomers in the foldamer"
@@ -287,15 +286,15 @@
          (inner-iterator (oligomer-monomer-context-focus-monomer-iterator cur-training-oligomer-space)))
     (lambda ()
       (when inner-iterator
-        (multiple-value-bind (number-remaining oligomer monomer-context focus-monomer)
+        (multiple-value-bind (number-remaining oligomer match focus-monomer)
             (funcall inner-iterator)
           (cond
-            ((> number-remaining 0) (values t oligomer monomer-context focus-monomer))
+            ((> number-remaining 0) (values t oligomer match focus-monomer))
             ((= number-remaining 0)
              (setf cur-training-oligomer-space (car remaining-training-oligomer-spaces)
                    remaining-training-oligomer-spaces (cdr remaining-training-oligomer-spaces)
                    inner-iterator (and cur-training-oligomer-space (oligomer-monomer-context-focus-monomer-iterator cur-training-oligomer-space)))
-             (values t oligomer monomer-context focus-monomer))
+             (values t oligomer match focus-monomer))
             (t nil)))))))
 
 (defun calculate-files (trainer-context &optional root-pathname)
@@ -303,6 +302,7 @@
                        #P"data/"))
          (output-dir (if root-pathname (merge-pathnames #P"output/" root-pathname)
                          #P"output/"))
+         (trainer-context (string trainer-context))
          (input-file (make-pathname :name trainer-context :type "input" :defaults data-dir))
          (sdf-file (make-pathname :name trainer-context :type "sdf" :defaults output-dir))
          (internals-file (make-pathname :name trainer-context :type "internals" :defaults output-dir))
@@ -323,7 +323,7 @@
                    for match = (monomer-context:match monomer-context-matcher focus-monomer oligomer)
                    unless match
                      do (error "Bad match")
-                       collect (monomer-context:match-as-string match)))))
+                       collect (monomer-context:match-as-symbol match)))))
 
 (defun unused-trainer-contexts (foldamer path)
   (let ((valid-trainer-contexts (valid-trainer-contexts foldamer))
@@ -362,7 +362,9 @@
                      (with-open-file (fout input-file :direction :output :if-exists :supersede)
                        (format fout "(ql:quickload :topology)~%")
                        (format fout "(format t \"Building trainer in file ~~s~~%\" *load-pathname*)~%")
+                       (format t "trainer-context ~s~%" trainer-context)
                        (format fout "(defparameter agg (foldamer:build-trainer ~s))~%" trainer-context)
+                       (format t "(defparameter agg (foldamer:build-trainer ~s))~%" trainer-context)
                        (format fout "(sys:exit 0)~%")
                        (when print
                          (format t "Generating trainer for ~a~%" trainer-context))
@@ -390,18 +392,18 @@
              (dihedral (kin:bonded-joint/get-phi joint)))
          (make-instance 'topology:complex-bonded-internal
                         :name name
-                        :bond distance
-                        :angle angle
-                        :dihedral dihedral)))
+                        :bond (float distance 1.0s0)
+                        :angle (float angle 1.0s0)
+                        :dihedral (float dihedral 1.0s0))))
       ((typep joint 'kin:bonded-joint)
        (let ((distance (kin:bonded-joint/get-distance joint))
              (angle (kin:bonded-joint/get-theta joint))
              (dihedral (kin:bonded-joint/get-phi joint)))
          (make-instance 'topology:bonded-internal
                         :name name
-                        :bond distance
-                        :angle angle
-                        :dihedral dihedral)))
+                        :bond (float distance 1.0s0)
+                        :angle (float angle 1.0s0)
+                        :dihedral (float dihedral 1.0s0))))
       (t (format flog "unknown-joint ~a ~a~%" name joint)))))
 
 
@@ -459,6 +461,7 @@ We need these to match fragment internals with each other later."
 
 
 (defun build-trainer (foldamer trainer-context &key (steps 3) (load-pathname *load-pathname*) build-info-msg verbose)
+  (unless (symbolp trainer-context) (error "trainer-context ~s must be a symbol" trainer-context))
   (let ((root-pathname (make-pathname :directory (butlast (pathname-directory load-pathname)))))
     (multiple-value-bind (input-file done-file sdf-file internals-file log-file svg-file)
         (calculate-files trainer-context root-pathname)
@@ -512,7 +515,7 @@ We need these to match fragment internals with each other later."
                                                                                                 :defaults flog)))
                                                               (format flog "build-trainer - the minimizer reported: ~a - writing to ~a~%" err save-filename)
                                                               (when verbose (format t "Encountered a minimizer error: ~a~%" err))
-                                                              (invoke-restart 'cando:save-and-skip-rest-of-minimization save-filename)
+                                                              (invoke-restart 'cando:skip-rest-of-minimization save-filename)
                                                               (return-from once nil))))
                                     (smirnoff:missing-dihedral (lambda (err)
                                                                  (format flog "Missing dihedral ~a~%" err))))
@@ -662,7 +665,7 @@ We need these to match fragment internals with each other later."
           for match = (monomer-context:match monomer-context-matcher monomer oligomer-or-space)
           when match
             do (progn
-                 (return-from monomer-context (monomer-context:match-as-string match))))
+                 (return-from monomer-context (monomer-context:match-as-symbol match))))
     (error 'no-matching-context
            :context (dump-local-monomer-context monomer))))
 

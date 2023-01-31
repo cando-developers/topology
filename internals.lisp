@@ -1,6 +1,6 @@
 (in-package :topology)
 
-(defclass internal ()
+(defclass internal (serial:serializable)
   ((name :initarg :name :accessor name)
    ))
 
@@ -33,40 +33,14 @@
 
 (cando:make-class-save-load complex-bonded-internal)
 
-(defclass out-of-focus-internal ()
-  ((name :initarg :name :accessor name)
-   (atres-name :initarg :atres-name :accessor atres-name)
-   (p-name :initarg :p-name :accessor p-name)
-   (p-atres-name :initarg :p-atres-name :accessor p-atres-name)
-   (gp-name :initarg :gp-name :accessor gp-name)
-   (gp-atres-name :initarg :gp-atres-name :accessor gp-atres-name)
-   (ggp-name :initarg :ggp-name :accessor ggp-name)
-   (ggp-atres-name :initarg :ggp-atres-name :accessor ggp-atres-name)
-   (dihedral-rad :initarg :dihedral-rad :accessor dihedral-rad)))
-
-(cando:make-class-save-load out-of-focus-internal
- :print-unreadably
- (lambda (obj stream)
-   (print-unreadable-object (obj stream :type t)
-     (format stream "~a(~a) ~a(~a) ~a(~a) ~a(~a) ~5,2f"
-             (name obj)
-             (atres-name obj)
-             (p-name obj)
-             (p-atres-name obj)
-             (gp-name obj)
-             (gp-atres-name obj)
-             (ggp-name obj)
-             (ggp-atres-name obj)
-             (dihedral-rad obj)))))
-
-(defclass fragment-internals ()
+(defclass fragment-internals (serial:serializable)
   ((index :initarg :index :accessor index)
    (internals :initarg :internals :accessor internals)
    (out-of-focus-internals :initarg :out-of-focus-internals :accessor out-of-focus-internals)))
 
 (cando:make-class-save-load fragment-internals)
 
-(defclass fragment-conformations ()
+(defclass fragment-conformations (serial:serializable)
   ((focus-monomer-name :initarg :focus-monomer-name :accessor focus-monomer-name)
    (monomer-context :initarg :monomer-context :accessor monomer-context)
    (total-count :initform 0 :initarg :total-count :accessor total-count)
@@ -74,7 +48,7 @@
 
 (cando:make-class-save-load fragment-conformations)
 
-(defclass fragment-conformations-map ()
+(defclass fragment-conformations-map (serial:serializable)
   ((monomer-context-to-fragment-conformations :initform (make-hash-table :test 'equal)
                                               :initarg :monomer-context-to-fragment-conformations
                                               :accessor monomer-context-to-fragment-conformations)))

@@ -44,9 +44,9 @@
 (defclass match ()
   ((parts :initform (make-array 16 :adjustable t :fill-pointer 0) :accessor parts)))
 
-(defun match-as-string (match)
-  (with-output-to-string (sout)
-    (format sout "~{~a~^_~}" (coerce (parts match) 'list))))
+(defun match-as-symbol (match)
+  (intern (with-output-to-string (sout)
+            (format sout "~{~a~^_~}" (coerce (parts match) 'list))) :keyword))
 
 (defun cursor (match)
   (fill-pointer (parts match)))

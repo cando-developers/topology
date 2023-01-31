@@ -154,7 +154,7 @@
           for index from 0
           for node-index = (mod index total-nodes)
           for job-index = (floor node-index nodes-per-job)
-          for trainer-context = (pathname-name (pathname trainer-file))
+          for trainer-context = (cdr pair)
           do (progn
                #+(or)(format t "cost ~a node-index ~a~%" cost node-index)
                (let ((trainer-job (make-instance 'trainer-job
@@ -186,8 +186,7 @@
       (format t "~a trainers need to be trained~%" (if (= trainer-count 0) "No" trainer-count))
       (loop for fi below jobs
             for fout across job-files
-            do (close fout))))
-  (sys:quit))
+            do (close fout)))))
 
 
 
@@ -200,7 +199,7 @@
     (format t "Fraction missing:   ~8,5f~%" (float (/ missing-matches-total (+ missing-matches-total matched-fragments-total))))
     missing-matches-total))
 
-(defun foldamer-extract-conformations (&key (path #P"./conformations.cando") spiros verbose)
+(defun foldamer-extract-conformations (&key (path #P"./conformations.cpk") spiros (verbose t))
   (format t "Extracting conformations for the path: ~a~%" path)
   (let ((foldamer-conformations-map (foldamer:extract-fragment-conformations-map path)))
     (format t "Matching fragment conformations~%")
@@ -209,7 +208,8 @@
             do (format t "Eliminating missing matches~%")
             do (setf matched (foldamer-eliminate-missing-fragment-matches matched spiros)))
       (format t "Saving ~a~%" path)
-      (cando:save-cando matched path)
+      (cpk:encode-to-file matched path)
+      matched
       )))
 
 
@@ -344,7 +344,7 @@
     (flet ((one-trainer (trainer-job node-index)
              (let* ((trainer-context (trainer-context trainer-job))
                     (input-file (merge-pathnames (make-pathname :directory '(:relative "data")
-                                                                :name trainer-context
+                                                                :name (string trainer-context)
                                                                 :type "input")))
                     (worker-index (lparallel:kernel-worker-index))
                     (worker-log-name (make-pathname :name (format nil "worker-~2,'0d-~2,'0d" node-index worker-index)

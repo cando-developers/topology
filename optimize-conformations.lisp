@@ -18,14 +18,14 @@
     (values monomer-context-index monomer-contexts-vector)))
 
 (defun angle-difference (b1 b2)
-  (let ((diff (mod (- b2 b1) 360)))
-    (if (< diff -180)
-	(incf diff 360)
-	(if (> diff 180)
-	    (decf diff 360)
+  (let ((diff (float (mod (- b2 b1) 360.0s0) 1.0s0)))
+    (if (< diff -180.0s0)
+	(incf diff 360.0s0)
+	(if (> diff 180.0s0)
+	    (decf diff 360.0s0)
 	    diff))))
 
-(defparameter *angle-threshold* 30.0)
+(defparameter *angle-threshold* 30.0s0)
 
 (defun fragments-match-p (before-fragment after-fragment after-fragment-focus-monomer-name)
   "Return T for the time being"
@@ -40,9 +40,9 @@
                (unless (eq (topology:name before-bonded-internal)
                            (topology:name after-bonded-internal))
                  (error "Atom names don't match ~s ~s" before-bonded-internal after-bonded-internal))
-               (let* ((diha (/ (topology:dihedral before-bonded-internal) 0.0174533))
-                      (dihb (/ (topology:dihedral after-bonded-internal) 0.0174533))
-                      (delta-angle (abs (angle-difference diha dihb))))
+               (let* ((diha (float (/ (float (topology:dihedral before-bonded-internal) 1.0s0) 0.0174533s0) 1.0s0))
+                      (dihb (float (/ (float (topology:dihedral after-bonded-internal) 1.0s0) 0.0174533s0) 1.0s0))
+                      (delta-angle (float (abs (angle-difference diha dihb)) 1.0s0)))
                  (when (> delta-angle *angle-threshold*)
                    (return-from fragments-match-p nil)))))
     t))
@@ -88,8 +88,8 @@
                                                (loop for ii below (length out-of-focus-internals)
                                                      for before-internal = (elt out-of-focus-internals ii)
                                                      for after-internal = (elt (topology:internals after-fragment) ii)
-                                                     for before-dih = (/ (topology:dihedral before-internal) 0.0174533)
-                                                     for after-dih = (/ (topology:dihedral after-internal) 0.0174533)
+                                                     for before-dih = (float (/ (topology:dihedral before-internal) 0.0174533) 1.0s0)
+                                                     for after-dih = (float (/ (topology:dihedral after-internal) 0.0174533) 1.0s0)
                                                      for delta-dih = (abs (foldamer:angle-difference before-dih after-dih))
                                                      collect (list (topology:name after-internal) after-dih (if (< delta-dih *angle-threshold*) "MATCH" "     ")))
                                                #+(or)(break "out-of-focus-internals ~a" out-of-focus-internals)
@@ -114,10 +114,9 @@
     fragment-conformations-map))
 
 
-(defun matching-oligomers-p (before-monomer-context before-oligomer before-focus-monomer before-focus-monomer-name
-                             after-monomer-context after-oligomer after-focus-monomer after-focus-monomer-name)
-  (declare (ignore before-monomer-context after-monomer-context))
-  (let ((after-iterator (topology:directional-coupling-iterator after-oligomer))
+(defun matching-oligomers-p (before-training-oligomer-space-iterator-factory before-oligomer before-focus-monomer before-focus-monomer-name
+                             after-training-oligomer-space-iterator-factory after-oligomer after-focus-monomer after-focus-monomer-name)
+  (let ((after-iterator (funcall after-training-oligomer-space-iterator-factory after-oligomer))
         after-coupling after-source-monomer-name after-target-monomer-name
         before-coupling before-source-monomer-name before-target-monomer-name)
     ;; Find the in-coupling for the after-oligomer from the after-focus-monomer
@@ -126,7 +125,7 @@
           do (unless after-coupling (return-from matching-oligomers-p nil))
           do (when (eq (topology:target-monomer after-coupling) after-focus-monomer)
                (return-from after-loop nil)))
-    (let ((before-iterator (topology:directional-coupling-iterator before-oligomer)))
+    (let ((before-iterator (funcall before-training-oligomer-space-iterator-factory before-oligomer)))
       (loop named before-loop
             do (multiple-value-setq (before-coupling before-source-monomer-name before-target-monomer-name) (funcall before-iterator))
             do (unless before-coupling (return-from matching-oligomers-p nil))
@@ -150,23 +149,25 @@
 (defun over-matching-oligomers (before-training-oligomer-space
                                 after-training-oligomer-space)
   (let ((before-iterator (oligomer-monomer-context-focus-monomer-iterator before-training-oligomer-space))
+        (before-training-oligomer-space-iterator-factory (topology:oligomer-space-directional-coupling-iterator-factory (oligomer-space before-training-oligomer-space)))
+        (after-training-oligomer-space-iterator-factory (topology:oligomer-space-directional-coupling-iterator-factory (oligomer-space after-training-oligomer-space)))
         result)
     (loop named before-loop
-          do (multiple-value-bind (number-remaining before-oligomer before-monomer-context before-focus-monomer before-focus-monomer-name)
+          do (multiple-value-bind (number-remaining before-oligomer before-match before-focus-monomer before-focus-monomer-name)
                  (funcall before-iterator)
                (unless number-remaining (return-from before-loop nil))
                (when (and number-remaining (>= number-remaining 0))
                  (let ((after-iterator (oligomer-monomer-context-focus-monomer-iterator after-training-oligomer-space)))
                    (loop named after-loop
-                         do (multiple-value-bind (number-remaining after-oligomer after-monomer-context after-focus-monomer after-focus-monomer-name)
+                         do (multiple-value-bind (number-remaining after-oligomer after-match after-focus-monomer after-focus-monomer-name)
                                 (funcall after-iterator)
                               (unless number-remaining (return-from after-loop nil))
                               (when (and number-remaining (>= number-remaining 0))
-                                (when (matching-oligomers-p before-monomer-context before-oligomer before-focus-monomer before-focus-monomer-name
-                                                            after-monomer-context after-oligomer after-focus-monomer after-focus-monomer-name)
+                                (when (matching-oligomers-p before-training-oligomer-space-iterator-factory before-oligomer before-focus-monomer before-focus-monomer-name
+                                                            after-training-oligomer-space-iterator-factory after-oligomer after-focus-monomer after-focus-monomer-name)
                                   (push (make-instance 'monomer-context-pair
-                                                       :before-monomer-context before-monomer-context
-                                                       :after-monomer-context after-monomer-context)
+                                                       :before-monomer-context (monomer-context:match-as-symbol before-match)
+                                                       :after-monomer-context (monomer-context:match-as-symbol after-match))
                                         result)
                                   #+(or)(format t "Do something with: ~a -> ~a~%" before-monomer-context after-monomer-context)))))))))
     result))

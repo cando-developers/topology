@@ -1,5 +1,10 @@
 (cl:in-package #:common-lisp-user)
 
+(defpackage #:serial
+  (:use #:cl)
+  (:export #:serializable))
+
+
 (defpackage #:topology
   (:use #:common-lisp)
   (:nicknames #:ts)
@@ -113,7 +118,7 @@
    #:build-all-atom-tree-external-coordinates
    #:copy-joint-positions-into-atoms
    #:copy-atom-positions-into-joints
-   #:directional-coupling-iterator
+   #:oligomer-space-directional-coupling-iterator-factory
 
    #:make-joint-tree
    #:joint-tree
@@ -140,7 +145,6 @@
    #:fragment-matches
    #:oligomer-monomer-name-at-index
    #:oligomer-monomer-name-for-monomer
-   #:directional-coupling-iterator
    #:missing-fragment-matches-count
    #:matched-fragment-conformations-summary
 
@@ -165,7 +169,7 @@
   (:export
    #:parse
    #:matches
-   #:match-as-string
+   #:match-as-symbol
    #:match
    ))
 

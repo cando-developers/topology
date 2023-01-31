@@ -371,28 +371,31 @@
 (defmethod couplings ((obj oligomer))
   (couplings (oligomer-space obj)))
 
-(defun directional-coupling-iterator (oligomer)
-  "Iterate over directional couplins in oligomer and return (values coupling source-monomer-name target-monomer-name)"
-  (let ((remaining-couplings (loop for coupling across (couplings oligomer)
+
+(defun oligomer-space-directional-coupling-iterator-factory (oligomer-space)
+  "Return a function that takes an oligomer and returns an
+   iterator that iterates over directional couplings in oligomer-space and return (values coupling source-monomer-name target-monomer-name)"
+  (let ((remaining-couplings (loop for coupling across (couplings oligomer-space)
                                    when (typep coupling 'directional-coupling)
                                      collect coupling))
         (monomer-to-index (let ((ht (make-hash-table)))
-                            (loop for monomer across (monomers oligomer)
+                            (loop for monomer across (monomers oligomer-space)
                                   for index from 0
                                   do (setf (gethash monomer ht) index))
                             ht)))
-    (lambda ()
-      (when remaining-couplings
-        (let* ((coupling (car remaining-couplings))
-               (source-monomer (source-monomer coupling))
-               (source-monomer-index (gethash source-monomer monomer-to-index))
-               (source-monomer-name (elt (monomers source-monomer)
-                                         (elt (monomer-indices oligomer) source-monomer-index)))
-               (target-monomer (target-monomer coupling))
-               (target-monomer-index (gethash target-monomer monomer-to-index))
-               (target-monomer-name (elt (monomers target-monomer)
-                                         (elt (monomer-indices oligomer) target-monomer-index))))
-          (setf remaining-couplings (cdr remaining-couplings))
-          (values coupling source-monomer-name target-monomer-name))))))
-
-
+    (lambda (oligomer)
+      (lambda ()
+        "An iterator that returns successive (values coupling source-monomer-name target-monomer-name)"
+        (when remaining-couplings
+          (let* ((coupling (car remaining-couplings))
+                 (source-monomer (source-monomer coupling))
+                 (source-monomer-index (gethash source-monomer monomer-to-index))
+                 (source-monomer-name (elt (monomers source-monomer)
+                                           (elt (monomer-indices oligomer) source-monomer-index)))
+                 (target-monomer (target-monomer coupling))
+                 (target-monomer-index (gethash target-monomer monomer-to-index))
+                 (target-monomer-name (elt (monomers target-monomer)
+                                           (elt (monomer-indices oligomer) target-monomer-index))))
+            (setf remaining-couplings (cdr remaining-couplings))
+            (values coupling source-monomer-name target-monomer-name)))))))
+  
