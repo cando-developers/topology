@@ -362,9 +362,7 @@
                      (with-open-file (fout input-file :direction :output :if-exists :supersede)
                        (format fout "(ql:quickload :topology)~%")
                        (format fout "(format t \"Building trainer in file ~~s~~%\" *load-pathname*)~%")
-                       (format t "trainer-context ~s~%" trainer-context)
                        (format fout "(defparameter agg (foldamer:build-trainer ~s))~%" trainer-context)
-                       (format t "(defparameter agg (foldamer:build-trainer ~s))~%" trainer-context)
                        (format fout "(sys:exit 0)~%")
                        (when print
                          (format t "Generating trainer for ~a~%" trainer-context))
@@ -461,7 +459,7 @@ We need these to match fragment internals with each other later."
 
 
 (defun build-trainer (foldamer trainer-context &key (steps 3) (load-pathname *load-pathname*) build-info-msg verbose)
-  (unless (symbolp trainer-context) (error "trainer-context ~s must be a symbol" trainer-context))
+  (unless (symbolp trainer-context) (setf trainer-context (intern trainer-context :keyword)))
   (let ((root-pathname (make-pathname :directory (butlast (pathname-directory load-pathname)))))
     (multiple-value-bind (input-file done-file sdf-file internals-file log-file svg-file)
         (calculate-files trainer-context root-pathname)
@@ -578,6 +576,7 @@ We need these to match fragment internals with each other later."
          (foldamer (cando:load-cando foldamer-filename))
          (fragment-conformations-map (make-instance 'topology:fragment-conformations-map)))
     (flet ((extract-one (trainer-name)
+	     (format t "Extracting conformation for ~a~%" trainer-name)
              (multiple-value-bind (input-file done-file sdf-file internals-file)
                  (calculate-files trainer-name filename)
                (declare (ignore input-file done-file sdf-file))
