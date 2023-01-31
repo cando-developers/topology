@@ -200,7 +200,7 @@
     missing-matches-total))
 
 (defun save-foldamer-conformations-map (map filename)
-  (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs (cpk:encode-to-file internals filename))))
+  (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs (cpk:encode-to-file map filename))))
 
 (defun load-foldamer-conformations-map (filename)
   (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs (cpk:decode-file filename))))
