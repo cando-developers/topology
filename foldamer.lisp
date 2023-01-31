@@ -575,8 +575,10 @@ We need these to match fragment internals with each other later."
   (let* ((foldamer-filename (merge-pathnames #P"foldamer.dat" filename))
          (foldamer (cando:load-cando foldamer-filename))
          (fragment-conformations-map (make-instance 'topology:fragment-conformations-map)))
-    (flet ((extract-one (trainer-name)
-	     (format t "Extracting conformation for ~a~%" trainer-name)
+    (flet ((extract-one (trainer-name &optional index max-index)
+             (if index
+	        (format t "Extracting conformation [~d/~d] for ~a~%" index max-index trainer-name)
+	        (format t "Extracting conformation for ~a~%" trainer-name))
              (multiple-value-bind (input-file done-file sdf-file internals-file)
                  (calculate-files trainer-name filename)
                (declare (ignore input-file done-file sdf-file))
@@ -587,7 +589,11 @@ We need these to match fragment internals with each other later."
       (let ((names-values
               (if parallel
                   (lparallel:pmapcar #'extract-one (valid-trainer-contexts foldamer))
-                  (mapcar #'extract-one (valid-trainer-contexts foldamer)))))
+		(loop with contexts = (valid-trainer-contexts foldamer)
+		      with length-contexts = (length contexts)
+		      for context in contexts
+		      for index from 0
+		      collect (extract-one context index length-contexts)))))
         (loop for name-result in names-values
               for trainer-name = (car name-result)
               for fragment-conformations = (cdr name-result)
