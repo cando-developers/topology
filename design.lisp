@@ -198,6 +198,8 @@ This is for looking up parts but if the thing returned is not a part then return
     (setf (gethash name *parts*) part)))
 
 (defun my-add-monomers (oligomer names)
+  (when (consp (car names))
+    (error "Illegal names - must be simple list - instead got ~s" names))
   (let ((monomer (make-instance 'monomer :monomers names)))
     (vector-push-extend monomer (monomers oligomer))
     (values (list monomer) nil)))
@@ -277,7 +279,7 @@ This is for looking up parts but if the thing returned is not a part then return
             (progn
               #+(or)(format *debug-io* "interpret-subtree info: ~s~%" info)
               (let* ((coupling (first info)) ; interpret a branch
-                     (node-info (cdr info)))
+                     (node-info (cadr info))) ;; CHECK
                 (multiple-value-bind (new-parts ringp)
                     (interpret-part oligomer node-info labels :parts parts)
                   (setf accumulated-parts (append accumulated-parts new-parts))

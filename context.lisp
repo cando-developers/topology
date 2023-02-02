@@ -44,6 +44,39 @@
 (defclass match ()
   ((parts :initform (make-array 16 :adjustable t :fill-pointer 0) :accessor parts)))
 
+(defun match-iterator (match)
+  "Return an iterator that will return successive monomer-contexts and then nil"
+  (let* ((name-indices (coerce (loop for index below (length (parts match))
+                                     for maybe-names = (elt (parts match) index)
+                                     when (consp maybe-names)
+                                       collect (cons index (length maybe-names)))
+                               'vector))
+         (counters (make-array (length name-indices) :element-type 'ext:byte32 :initial-element 0))
+         (done nil))
+    (lambda ()
+      (let (result
+            focus-monomer-name)
+        (when (not done)
+          (setf focus-monomer-name (elt (elt (parts match) 0) (elt counters 0))
+                result (intern (format nil "~{~a~^_~}" (loop with counter-index = 0
+                                                             for index below (length (parts match))
+                                                             for maybe-name = (elt (parts match) index)
+                                                             if (consp maybe-name)
+                                                               collect (let* ((name (elt maybe-name (elt counters counter-index))))
+                                                                         (incf counter-index)
+                                                                         name)
+                                                             else
+                                                               collect maybe-name)) :keyword))
+          (loop named advance
+                for counter-index below (length counters)
+                do (incf (elt counters counter-index))
+                do (when (< (elt counters counter-index) (cdr (elt name-indices counter-index)))
+                     (return-from advance nil))
+                do (setf (elt counters counter-index) 0)
+                finally (setf done t)
+                ))
+        (values result focus-monomer-name counters)))))
+
 (defun match-as-symbol (match)
   (intern (with-output-to-string (sout)
             (format sout "~{~a~^_~}" (coerce (parts match) 'list))) :keyword))
@@ -110,6 +143,7 @@
         (error "monomer ~a must be a topology:monomer" monomer))))
 
 (defmethod matches-impl ((pattern null) (monomer topology:monomer) oligomer match)
+  (declare (ignore oligomer match))
   (ensure-monomer-or-nil monomer))
 
 (defmethod matches-impl ((pattern monomer-match-node) (monomer topology:monomer) (oligomer-space topology:oligomer-space) match)
@@ -156,7 +190,10 @@
            (unwind-cursor match cursor)
            nil)))))
 
-(defun match (pattern monomer oligomer)
+(defun match (pattern monomer oligomer-or-space)
+  "Try to match the pattern starting on the monomer in the oligomer-space.
+If oligomer-or-space is an oligomer-space then the match can be iterated over to generate
+all monomer-contexts that match.  Use (match-iterator match) to generate that iterator."
   (let ((match (make-instance 'match)))
-    (when (matches-impl pattern monomer oligomer match)
+    (when (matches-impl pattern monomer oligomer-or-space match)
       match)))

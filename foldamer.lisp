@@ -262,14 +262,30 @@
                      do (return-from find-oligomer-for-monomer-context (values oligomer focus-monomer))))))
 
 
+#+(or)(defun new-oligomer-monomer-context-focus-monomer-iterator (training-oligomer-space)
+  "Return an iterator that returns successive (values number-remaining oligomer monomer-context focus-monomer focus-monomer-name)
+   in the training-oligomer-space. When it runs out it returns nil."
+  (let* ((number-of-sequences (topology:number-of-sequences (foldamer:oligomer-space training-oligomer-space)))
+         (sequence-index 0)
+         (monomer-context-matcher (monomer-context-matcher training-oligomer-space))
+         (focus-monomer (focus-monomer training-oligomer-space))
+         (oligomer-space (oligomer-space training-oligomer-space))
+         (match (monomer-context:match monomer-context-matcher focus-monomer oligomer-space))
+         (match-iterator (monomer-context:match-iterator match)))
+    (lambda ()
+      (multiple-value-bind (maybe-monomer-context focus-monomer-name)
+          (funcall match-iterator)
+        (unless maybe-monomer-context
+          (values oligomer maybe-monomer-context focus-monomer focus-monomer-name))))))
+
 (defun oligomer-monomer-context-focus-monomer-iterator (training-oligomer-space)
   "Return an iterator that returns successive (values number-remaining oligomer monomer-context focus-monomer focus-monomer-name)
    in the training-oligomer-space. When it runs out it returns nil."
   (let* ((number-of-sequences (topology:number-of-sequences (foldamer:oligomer-space training-oligomer-space)))
          (sequence-index 0)
-         (oligomer-space (oligomer-space training-oligomer-space))
          (monomer-context-matcher (monomer-context-matcher training-oligomer-space))
          (focus-monomer (focus-monomer training-oligomer-space))
+         (oligomer-space (oligomer-space training-oligomer-space))
          (focus-monomer-index (position focus-monomer (topology:monomers oligomer-space))))
     (lambda ()
       (unless (>= sequence-index number-of-sequences)
@@ -312,6 +328,21 @@
     (values input-file done-file sdf-file internals-file log-file svg-file)))
 
 (defun valid-trainer-contexts (foldamer)
+  (let ((training-spaces (training-oligomer-spaces foldamer)))
+    (loop for training-space in training-spaces
+          for oligomer-space = (oligomer-space training-space)
+          for focus-monomer = (focus-monomer training-space)
+          for monomer-context-matcher = (monomer-context-matcher training-space)
+          for match = (monomer-context:match monomer-context-matcher focus-monomer oligomer-space)
+          for match-iterator = (monomer-context:match-iterator match)
+          append (loop named inner
+                       for maybe-context = (funcall match-iterator)
+                       when maybe-context
+                         collect maybe-context into contexts
+                       until (null maybe-context)
+                       finally (return-from inner contexts)))))
+
+(defun slow-valid-trainer-contexts (foldamer)
   (let ((training-spaces (training-oligomer-spaces foldamer)))
     (loop for training-space in training-spaces
           for oligomer-space = (oligomer-space training-space)

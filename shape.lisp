@@ -102,3 +102,14 @@
          (root-monomer-shape (gethash root (monomer-shape-map oligomer-shape))))
     (setf (fragment-conformation-index root-monomer-shape) (random (length (topology:fragments (fragment-conformations root-monomer-shape)))))
     (random-fragment-conformation-index-impl root-monomer-shape oligomer-shape)))
+
+
+(defun build-shape (oligomer-shape fragment-conformations)
+  (let* ((oligomer (oligomer oligomer-shape))
+         (conf (topology:make-conformation oligomer)))
+    (topology::fill-internals-from-oligomer-shape conf fragment-conformations oligomer-shape)
+    (topology:zero-all-atom-tree-external-coordinates conf)
+    (topology:build-all-atom-tree-external-coordinates conf)
+    (topology:copy-joint-positions-into-atoms conf)
+    (topology:aggregate conf)))
+

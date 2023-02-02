@@ -200,10 +200,10 @@
     missing-matches-total))
 
 (defun save-foldamer-conformations-map (map filename)
-  (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs (cpk:encode-to-file map filename))))
+  (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs () (cpk:encode-to-file map filename))))
 
 (defun load-foldamer-conformations-map (filename)
-  (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs (cpk:decode-file filename))))
+  (first (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs () (cpk:decode-file filename)))))
 
 (defun foldamer-extract-conformations (&key (path #P"./conformations.cpk") spiros (verbose t))
   (format t "Extracting conformations for the path: ~a~%" path)

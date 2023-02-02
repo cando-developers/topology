@@ -114,15 +114,6 @@ Specialize the foldamer argument to provide methods"))
 
 
 
-(defun build-shape (oligomer-shape fragment-conformations)
-  (let* ((oligomer (oligomer oligomer-shape))
-         (conf (topology:make-conformation oligomer)))
-    (topology::fill-internals-from-oligomer-shape conf fragment-conformations oligomer-shape)
-    (topology:zero-all-atom-tree-external-coordinates conf)
-    (topology:build-all-atom-tree-external-coordinates conf)
-    (topology:copy-joint-positions-into-atoms conf)
-    (topology:aggregate conf)))
-
 (defun search-conformations (oligomer-space fragment-conformations monomer-names sdf-filename &optional (number-struct 50) (number-conf 100))
   (with-open-file (fout sdf-filename :direction :output)
     (loop for struct-count below number-struct

@@ -162,7 +162,8 @@
    #:random-fragment-conformation-index
    #:make-oligomer-shape
    #:build-one-molecule-for-topology
-   #:sketch-svg))
+   #:sketch-svg
+   #:make-oligomer-space))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -171,6 +172,7 @@
    #:matches
    #:match-as-symbol
    #:match
+   #:match-iterator
    ))
 
 (defpackage #:foldamer
@@ -183,6 +185,10 @@
    #:unused-trainer-contexts
    #:maybe-remove-unused-trainers
    #:generate-training-oligomers
+   #:training-oligomer-space
+   #:oligomer-space
+   #:focus-monomer
+   #:monomer-context-matcher
    #:find-oligomer-for-monomer-context
    #:oligomer-monomer-context-iterator
    #:build-trainer
