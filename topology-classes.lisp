@@ -333,7 +333,7 @@
 (defun number-of-sequences (oligomer-space)
   ;; Lazy calculate number-of-sequences
   (when (null (%number-of-sequences oligomer-space))
-    (setf (%number-of-sequences oligomer-space) (calculate-number-of-sequences oligomers-space)))
+    (setf (%number-of-sequences oligomer-space) (calculate-number-of-sequences oligomerPp-space)))
   (%number-of-sequences oligomer-space))
 
 (defun make-oligomer-space (foldamer tree &key (parts *parts*))
