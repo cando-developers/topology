@@ -59,7 +59,7 @@
    (print-unreadable-object (obj stream :type t))))
 
 (defclass matched-fragment-conformations-map (fragment-conformations-map)
-  ((fragment-matches :initform (make-hash-table :test 'equalp)
+  ((fragment-matches :initform (make-hash-table :test 'equal)
                      :initarg :fragment-matches
                      :accessor fragment-matches)))
 

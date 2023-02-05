@@ -294,26 +294,6 @@ This is for looking up parts but if the thing returned is not a part then return
                   (do-coupling oligomer coupling ringp previous-parts new-parts)
                   (setf previous-parts new-parts)))))))))
 
-(defun make-oligomer-space (foldamer tree &key (parts *parts*))
-  "Make an oligomer-space from a description in the **tree**.
-The tree is a nested list of lists that look like 
-(component coupling component coupling component ... ).
-It starts with the name of a topology or a design:part.
-The component can be a name of a single topology, it can be a design:part,
-or it can 
-
-Examples:
-(make-oligomer-space '(:ccap :default :ala :default :ala :default :ser :default :ncap))
-(make-oligomer-space '((:lego3 :label :first)
-                 :default :lego3
-                 :default :lego3
-                 :default (cycle :first)))
-"
-  (let* ((oligomer-space (make-instance 'oligomer-space
-                                        :foldamer foldamer))
-         (labels (make-hash-table)))
-    (interpret-subtree oligomer-space tree labels :parts parts)
-    oligomer-space))
 
 (defun classify-topologys (topology-hash-table)
   (let ((origins (make-hash-table))

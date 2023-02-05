@@ -1,5 +1,8 @@
 (in-package :foldamer)
 
+(defparameter *foldamer-path* #P"data/foldamer.dat")
+(defparameter *conformations-path* #P"data/conformations.cpk")
+
 (define-condition no-matching-context ()
   ((context :initarg :context :accessor context))
   (:report (lambda (condition stream)
@@ -314,12 +317,12 @@
             (t nil)))))))
 
 (defun calculate-files (trainer-context &optional root-pathname)
-  (let* ((data-dir (if root-pathname (merge-pathnames #P"data/" root-pathname)
-                       #P"data/"))
+  (let* ((input-dir (if root-pathname (merge-pathnames #P"input/" root-pathname)
+                       #P"input/"))
          (output-dir (if root-pathname (merge-pathnames #P"output/" root-pathname)
                          #P"output/"))
          (trainer-context (string trainer-context))
-         (input-file (make-pathname :name trainer-context :type "input" :defaults data-dir))
+         (input-file (make-pathname :name trainer-context :type "input" :defaults input-dir))
          (sdf-file (make-pathname :name trainer-context :type "sdf" :defaults output-dir))
          (internals-file (make-pathname :name trainer-context :type "internals" :defaults output-dir))
          (log-file (make-pathname :name trainer-context :type "log" :defaults output-dir))
@@ -378,7 +381,8 @@
 
 (defun generate-training-oligomers (foldamer path &key force-save print)
   (ensure-directories-exist path)
-  (let ((foldamer-path (merge-pathnames #P"foldamer.dat" path)))
+  (let ((foldamer-path (merge-pathnames *foldamer-path* path)))
+    (ensure-directories-exist foldamer-path)
     (cando:save-cando foldamer foldamer-path))
   (with-open-file (fmakefile (merge-pathnames "makefile" path) :direction :output :if-exists :supersede)
     (let ((all-done-files nil))
@@ -599,11 +603,13 @@ We need these to match fragment internals with each other later."
                     (format fout ")~%")))))))))))
 
 
-(defgeneric load-force-field (force-field))
+(defgeneric load-force-field (force-field)
+  (:documentation "The foldamer provides this to load whatever force-fields it requires.
+For now the force-field argument is T - but we may want to specialize on a foldamer name symbl with eql specializers in the future."))
 
 (defun extract-fragment-conformations-map (filename &key (parallel nil))
   "Parallel version is slower than serial because of false sharing in GC"
-  (let* ((foldamer-filename (merge-pathnames #P"foldamer.dat" filename))
+  (let* ((foldamer-filename (merge-pathnames *foldamer-path* filename))
          (foldamer (cando:load-cando foldamer-filename))
          (fragment-conformations-map (make-instance 'topology:fragment-conformations-map)))
     (flet ((extract-one (trainer-name &optional index max-index)
@@ -635,7 +641,7 @@ We need these to match fragment internals with each other later."
 
 
 (defun check-fragment-conformations-map (filename)
-  (let* ((foldamer-filename (merge-pathnames #P"foldamer.dat" filename))
+  (let* ((foldamer-filename (merge-pathnames *foldamer-path* filename))
          (foldamer (cando:load-cando foldamer-filename))
          (fragment-conformations-map (make-instance 'topology:fragment-conformations-map))
          (left-count 0)
@@ -726,3 +732,15 @@ We need these to match fragment internals with each other later."
                      (push key unused-contexts)))
                used-contexts-set)
       (values t used-contexts unused-contexts))))
+
+
+(defun load-foldamer (filename)
+  "Load the foldamer from a file, register topologies"
+  (let ((foldamer (cando:load-cando filename)))
+    (loop for topology in (topologys foldamer)
+          do (cando:register-topology topology (topology:name topology)))
+    foldamer))
+
+(defun save-foldamer (foldamer filename)
+  "Save the foldamer to a file"
+  (cando:save-cando foldamer filename))

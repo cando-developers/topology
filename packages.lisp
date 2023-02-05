@@ -163,7 +163,8 @@
    #:make-oligomer-shape
    #:build-one-molecule-for-topology
    #:sketch-svg
-   #:make-oligomer-space))
+   #:make-oligomer-space
+   #:calculate-number-of-sequences))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -219,7 +220,9 @@
    #:verify-all-training-molecules-can-be-parameterized
    #:load-force-field
    #:load-foldamer-conformations-map
-   #:save-foldamer-conformations-map))
+   #:save-foldamer-conformations-map
+   #:load-foldamer
+   #:save-foldamer))
 
 
 (defpackage #:topology.graphviz

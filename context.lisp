@@ -42,7 +42,8 @@
      (format stream "~a ~a" (left obj) (right obj)))))
 
 (defclass match ()
-  ((parts :initform (make-array 16 :adjustable t :fill-pointer 0) :accessor parts)))
+  ((parts :initform (make-array 16 :adjustable t :fill-pointer 0) :accessor parts)
+   (maybe-monomers :initform (make-array 16 :adjustable t :fill-pointer 0) :accessor maybe-monomers)))
 
 (defun match-iterator (match)
   "Return an iterator that will return successive monomer-contexts and then nil"
@@ -84,8 +85,9 @@
 (defun cursor (match)
   (fill-pointer (parts match)))
 
-(defun add-match (match thing)
-  (vector-push-extend thing (parts match)))
+(defun add-match (match thing &optional monomer)
+  (vector-push-extend thing (parts match))
+  (vector-push-extend monomer (maybe-monomers match)))
 
 (defun unwind-cursor (match cursor)
   (setf (fill-pointer (parts match)) cursor))
@@ -152,14 +154,14 @@
      (loop for monomer-name in (topology:monomers monomer)
            unless (member monomer-name (names pattern))
              do (return-from matches-impl nil))
-     (add-match match (topology:monomers monomer))
+     (add-match match (topology:monomers monomer) monomer)
      monomer)))
 
 (defmethod matches-impl ((pattern monomer-match-node) (monomer topology:monomer) (oligomer topology:oligomer) match)
   (ensure-monomer-or-nil
    (let ((monomer-name (topology:current-stereoisomer-name monomer oligomer)))
      (when (member monomer-name (names pattern))
-       (add-match match monomer-name)
+       (add-match match monomer-name monomer)
        monomer))))
 
 (defmethod matches-impl ((pattern plug-to-monomer-node) (monomer topology:monomer) oligomer match)

@@ -1,7 +1,6 @@
 (in-package :foldamer)
 
 
-
 (defun done-data (trainer-context)
   (multiple-value-bind (input-file done-file)
     (foldamer:calculate-files trainer-context)
@@ -200,14 +199,45 @@
     missing-matches-total))
 
 (defun save-foldamer-conformations-map (map filename)
-  (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs () (cpk:encode-to-file map filename))))
+  (cpk:tracking-refs ()
+                     (cpk:with-index (topology:bonded-internal
+                                      topology:fragment-internals
+                                      topology::dihedral topology::angle
+                                      topology::bond
+                                      topology::out-of-focus-internals
+                                      topology::name)
+                       (cpk:encode-to-file map filename))))
 
 (defun load-foldamer-conformations-map (filename)
-  (first (cpk:with-index (topology:bonded-internal topology:fragment-internals topology::dihedral topology::angle topology::bond topology::out-of-focus-internals topology::name) (cpk:tracking-refs () (cpk:decode-file filename)))))
+  (let ((map (first (cpk:with-index (topology:bonded-internal
+                                      topology:fragment-internals
+                                      topology::dihedral
+                                      topology::angle
+                                      topology::bond
+                                      topology::out-of-focus-internals
+                                      topology::name)
+                       (cpk:tracking-refs ()
+                                            (cpk:decode-file filename))))))
+    map
+    #+(or)
+    (let* ((fragment-matches (make-hash-table :test 'equal))
+           (monomer-context-to-fragment-conformations (make-hash-table :test 'equal)))
+      (format t "map = ~s~%" map)
+      (maphash (lambda (key value)
+                 (let ((new-key (cons (intern (string (car key)) :keyword) (intern (string (cdr key)) :keyword))))
+                   (setf (gethash new-key fragment-matches) value)))
+               (topology:fragment-matches map))
+      (maphash (lambda (key value)
+                 (let ((new-key (intern (string key) :keyword)))
+                   (setf (gethash new-key monomer-context-to-fragment-conformations) value)))
+               (topology:monomer-context-to-fragment-conformations map))
+      (make-instance 'topology:matched-fragment-conformations-map
+                     :fragment-matches fragment-matches
+                     :monomer-context-to-fragment-conformations monomer-context-to-fragment-conformations))))
 
-(defun foldamer-extract-conformations (&key (path #P"./conformations.cpk") spiros (verbose t))
+(defun foldamer-extract-conformations (&key (path *conformations-path*) spiros (verbose t))
   (format t "Extracting conformations for the path: ~a~%" path)
-  (let ((foldamer-conformations-map (foldamer:extract-fragment-conformations-map path)))
+  (let ((foldamer-conformations-map (foldamer:extract-fragment-conformations-map "./")))
     (format t "Matching fragment conformations~%")
     (let ((matched (foldamer:optimize-fragment-conformations-map foldamer-conformations-map spiros verbose)))
       (loop while (> (foldamer-report-conformations matched) 0)
@@ -346,7 +376,7 @@
   (let* ((print-lock (bordeaux-threads:make-recursive-lock))
          (all-node-work (cando:load-cando "node-work.cando"))
          (node-trainers (gethash node-index all-node-work))
-         (foldamer-dat-pathname (merge-pathnames #P"./foldamer.dat"))
+         (foldamer-dat-pathname (merge-pathnames *foldamer-path*))
          (foldamer (cando:load-cando foldamer-dat-pathname)))
     (flet ((one-trainer (trainer-job node-index)
              (bordeaux-threads:with-recursive-lock-held (print-lock)

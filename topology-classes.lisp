@@ -300,7 +300,10 @@
    (monomers :initform (make-array 16 :adjustable t :fill-pointer 0)
              :initarg :monomers :accessor monomers)
    (couplings :initform (make-array 16 :adjustable t :fill-pointer 0)
-              :initarg :couplings :accessor couplings)))
+              :initarg :couplings :accessor couplings)
+   (number-of-sequences :initform 1
+                        :initarg :number-of-sequences
+                        :accessor number-of-sequences)))
 
 (cando:make-class-save-load oligomer-space
   :print-unreadably
@@ -321,12 +324,34 @@
 (defun add-monomer (oligomer-space monomer)
   (vector-push-extend monomer (monomers oligomer-space)))
 
-(defun number-of-sequences (oligomer-space)
+(defun calculate-number-of-sequences (oligomer-space)
   (let ((num 1))
   (loop for monomer across (monomers oligomer-space)
         do (setf num (* num (length (monomers monomer)))))
     num))
 
+(defun make-oligomer-space (foldamer tree &key (parts *parts*))
+  "Make an oligomer-space from a description in the **tree**.
+The tree is a nested list of lists that look like 
+(component coupling component coupling component ... ).
+It starts with the name of a topology or a design:part.
+The component can be a name of a single topology, it can be a design:part,
+or it can 
+
+Examples:
+(make-oligomer-space '(:ccap :default :ala :default :ala :default :ser :default :ncap))
+(make-oligomer-space '((:lego3 :label :first)
+                 :default :lego3
+                 :default :lego3
+                 :default (cycle :first)))
+"
+  (let* ((oligomer-space (make-instance 'oligomer-space
+                                        :foldamer foldamer))
+         (labels (make-hash-table)))
+    (interpret-subtree oligomer-space tree labels :parts parts)
+    (setf (number-of-sequences oligomer-space)
+          (calculate-number-of-sequences oligomer-space))
+    oligomer-space))
 
 (defclass oligomer ()
   ((monomer-indices :initarg :monomer-indices :accessor monomer-indices)
@@ -359,6 +384,7 @@
         collect (elt (monomers monomer) (elt (monomer-indices oligomer) index))))
 
 (defun make-oligomer (oligomer-space &optional (index 0))
+  "Build an oligomer in the oligomer space"
   (let ((olig (make-instance 'oligomer
                              :monomer-indices (make-array (length (monomers oligomer-space)) :element-type 'ext:byte32)
                              :oligomer-space oligomer-space)))

@@ -42,23 +42,23 @@
             for couplings = (couplings monomer)
             for in-monomer = nil
             for out-mons = nil
-            do (format t "monomer = ~a~%" monomer)
+;;            do (format t "monomer = ~a~%" monomer)
             do (setf (gethash monomer monomer-shape-map) monomer-shape)
             do (maphash (lambda (key coupling)
                           (if (in-plug-name-p key)
                               (progn
                                 (setf in-monomer (topology:source-monomer coupling))
                                 (setf (gethash monomer in-monomers) (topology:source-monomer coupling))
-                                (format t "In plug coupling ~a ~a~%" key coupling))
+                                #+(or)(format t "In plug coupling ~a ~a~%" key coupling))
                               (progn
                                 (push (topology:target-monomer coupling) out-mons)
-                                (format t "Out plug coupling ~a ~a~%" key coupling))))
+                                #+(or)(format t "Out plug coupling ~a ~a~%" key coupling))))
                         couplings)
             do (unless in-monomer
                  (setf the-root-monomer monomer))
             do (setf (gethash monomer out-monomers) out-mons)
             do (setf (aref monomer-shape-vector index) monomer-shape)
-            do (format t "monomer-context ~a~%" monomer-context)
+;;            do (format t "monomer-context ~a~%" monomer-context)
             finally (return (values monomer-shape-vector the-root-monomer in-monomers out-monomers monomer-shape-map)))
     (make-instance 'oligomer-shape
                    :oligomer oligomer
@@ -72,7 +72,7 @@
 
 
 (defun all-monomers-impl (root shape)
-  (format t "monomer ~a in: ~a~%" root (gethash root (in-monomers shape)))
+  #+(or)(format t "monomer ~a in: ~a~%" root (gethash root (in-monomers shape)))
   (let ((out-monomers (gethash root (out-monomers shape))))
     (loop for out-monomer in out-monomers
           do (all-monomers-impl out-monomer shape))))
@@ -89,8 +89,13 @@
     (loop for out-monomer in out-monomers
           for out-monomer-shape = (gethash out-monomer (monomer-shape-map oligomer-shape))
           for fragment-match-key = (cons (monomer-context root-monomer-shape) (monomer-context out-monomer-shape))
-          for allowed-fragment-vec = (gethash fragment-match-key (topology:fragment-matches (topology:matched-fragment-conformations-map oligomer-shape)))
-          for allowed-fragment-indices = (elt allowed-fragment-vec (fragment-conformation-index root-monomer-shape))
+          for allowed-fragment-vec = (let* ((ht(topology:fragment-matches (topology:matched-fragment-conformations-map oligomer-shape)))
+                                            (val (gethash fragment-match-key ht)))
+                                       (unless val (break "Could not find value for key ~a in ht: ~a" fragment-match-key ht))
+                                       val)
+          for allowed-fragment-indices = (progn
+                                           #+(or)(format t "alowed-fragment-vec ~s (fragment-conformation-index root-monomer-shape) -> ~s~%" allowed-fragment-vec (fragment-conformation-index root-monomer-shape))
+                                           (elt allowed-fragment-vec (fragment-conformation-index root-monomer-shape)))
           for fragment-conformation-index = (if allowed-fragment-indices
                                                 (elt allowed-fragment-indices (random (length allowed-fragment-indices)))
                                                 :BADBADBAD)
@@ -104,9 +109,10 @@
     (random-fragment-conformation-index-impl root-monomer-shape oligomer-shape)))
 
 
-(defun build-shape (oligomer-shape fragment-conformations)
+(defun build-shape (oligomer-shape)
   (let* ((oligomer (oligomer oligomer-shape))
-         (conf (topology:make-conformation oligomer)))
+         (conf (topology:make-conformation oligomer))
+         (fragment-conformations (matched-fragment-conformations-map oligomer-shape)))
     (topology::fill-internals-from-oligomer-shape conf fragment-conformations oligomer-shape)
     (topology:zero-all-atom-tree-external-coordinates conf)
     (topology:build-all-atom-tree-external-coordinates conf)
