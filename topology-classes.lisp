@@ -301,9 +301,9 @@
              :initarg :monomers :accessor monomers)
    (couplings :initform (make-array 16 :adjustable t :fill-pointer 0)
               :initarg :couplings :accessor couplings)
-   (number-of-sequences :initform 1
+   (%number-of-sequences :initform nil
                         :initarg :number-of-sequences
-                        :accessor number-of-sequences)))
+                        :accessor %number-of-sequences)))
 
 (cando:make-class-save-load oligomer-space
   :print-unreadably
@@ -329,6 +329,12 @@
   (loop for monomer across (monomers oligomer-space)
         do (setf num (* num (length (monomers monomer)))))
     num))
+
+(defun number-of-sequences (oligomer-space)
+  ;; Lazy calculate number-of-sequences
+  (when (null (%number-of-sequences oligomer-space))
+    (setf (%number-of-sequences oligomer-space) (calculate-number-of-sequences oligomers-space)))
+  (%number-of-sequences oligomer-space))
 
 (defun make-oligomer-space (foldamer tree &key (parts *parts*))
   "Make an oligomer-space from a description in the **tree**.

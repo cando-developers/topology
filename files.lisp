@@ -138,7 +138,9 @@
          (monomer-context-to-oligomer-map (monomer-context-to-oligomer-map spiros))
          (unsorted-trainers-that-need-work (loop for trainer-context in trainer-contexts
                                                  when (needs-work trainer-context steps)
-                                                   collect (let* ((oligomer (gethash trainer-context monomer-context-to-oligomer-map))
+                                                   collect (let* ((oligomer (let ((ol (gethash trainer-context monomer-context-to-oligomer-map)))
+                                                                              (unless ol (error "oligomer was nil for ~a" trainer-context))
+                                                                              ol))
                                                                   (number-of-monomers (length (topology:monomers oligomer)))
                                                                   #+(or)(molecule (topology:build-molecule oligomer))
                                                                   #+(or)(cost (chem:cost molecule)))

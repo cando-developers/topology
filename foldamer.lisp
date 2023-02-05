@@ -90,8 +90,8 @@
 (defun oligomer-space-from-dag (foldamer dag topology-groups)
   (let ((focus-node (root dag))
         (node-to-monomer (make-hash-table))
-        (oligomer-space (make-instance 'topology:oligomer-space
-                                       :foldamer foldamer)))
+        (oligomer-space (topology:make-oligomer-space
+                         :foldamer foldamer)))
     (loop for node in (nodes dag)
           for name = (name node)
           for names = (gethash name topology-groups)
