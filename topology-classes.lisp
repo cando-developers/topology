@@ -355,7 +355,7 @@ Examples:
                                         :foldamer foldamer))
          (labels (make-hash-table)))
     (interpret-subtree oligomer-space tree labels :parts parts)
-    (setf (number-of-sequences oligomer-space)
+    (setf (%number-of-sequences oligomer-space)
           (calculate-number-of-sequences oligomer-space))
     oligomer-space))
 
