@@ -436,3 +436,13 @@ Examples:
               (setf remaining-couplings (cdr remaining-couplings))
               (values coupling source-monomer-name target-monomer-name))))))))
   
+
+
+(defun formula-for-topology (topology)
+  (let* ((ht (make-hash-table))
+         (constitution (constitution topology))
+         (const-atoms (constitution-atoms constitution)))
+    (loop for const-atom across const-atoms
+          for element = (element const-atom)
+          do (incf (gethash element ht 0)))
+    (alexandria:hash-table-alist ht)))

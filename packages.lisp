@@ -116,8 +116,6 @@
    #:joints
    #:zero-all-atom-tree-external-coordinates
    #:build-all-atom-tree-external-coordinates
-   #:copy-joint-positions-into-atoms
-   #:copy-atom-positions-into-joints
    #:oligomer-space-directional-coupling-iterator-factory
 
    #:make-joint-tree
@@ -164,7 +162,8 @@
    #:build-one-molecule-for-topology
    #:sketch-svg
    #:make-oligomer-space
-   #:calculate-number-of-sequences))
+   #:calculate-number-of-sequences
+   #:energy-function))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)

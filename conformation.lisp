@@ -36,7 +36,7 @@ Specialize the foldamer argument to provide methods"))
           ;; This is where I would invoke Conformation_O::buildMoleculeUsingOligomer
           ;; Use the monomers-to-topologys
           (let* ((energy-function (chem:make-energy-function :matter aggregate))
-                 (atmolecule (build-atmolecule-using-oligomer oligomer molecule molecule-index monomer-positions joint-tree))
+                 (atmolecule (build-atmolecule-using-oligomer oligomer molecule molecule-index monomer-positions joint-tree (chem:atom-table energy-function)))
                  )
             (put-atmolecule ataggregate atmolecule molecule-index)
             (let ((conf (make-instance 'conformation
@@ -64,28 +64,29 @@ Specialize the foldamer argument to provide methods"))
                            for joint = (aref (joints atresidue) atom-index)
                            do (funcall callback atom joint (list molecule-index residue-index atom-index)))))))
 
+#+(or)
 (defun copy-atom-positions-into-joints (conformation)
   (walk-atoms-joints conformation
                      (lambda (atm jnt atomid)
                        (declare (ignore atomid))
                        (kin:set-position jnt (chem:get-position atm)))))
 
-(defun copy-joint-positions-into-atoms (conformation)
+#+(or)(defun copy-joint-positions-into-atoms (conformation)
   (walk-atoms-joints conformation
                      (lambda (atm jnt atomid)
                        (declare (ignore atomid))
-                       (chem:set-position atm (kin:get-position jnt)))))
+                       (chem:set-position atm (kin:position coords jnt)))))
 
-(defun update-joint-tree-internal-coordinates (conformation)
+(defun update-joint-tree-internal-coordinates (conformation coordinates)
   (let ((ataggregate (ataggregate conformation)))
     (walk-ataggregate-joints ataggregate
                              (lambda (joint atom-id)
                                (declare (ignore atom-id))
-                               (kin:update-internal-coord joint)))))
+                               (kin:update-internal-coord joint coordinates)))))
 
-(defun build-all-atom-tree-external-coordinates (conformation)
+(defun build-all-atom-tree-external-coordinates (conformation coords)
   (let ((joint (root (joint-tree conformation))))
-    (kin:update-xyz-coords joint)))
+    (kin:update-xyz-coords joint coords)))
 
 
 (defun zero-all-atom-tree-external-coordinates (conf)
@@ -126,7 +127,8 @@ Specialize the foldamer argument to provide methods"))
 
 
 (defun search-conformations (oligomer-space fragment-conformations monomer-names sdf-filename &optional (number-struct 50) (number-conf 100))
-  (with-open-file (fout sdf-filename :direction :output)
+  (error "Implement search-conformations")
+  #+(or)(with-open-file (fout sdf-filename :direction :output)
     (loop for struct-count below number-struct
           for rand-sequence = (random (topology:number-of-sequences oligomer-space))
           for _a = (format t "rand-sequence ~a~%" rand-sequence)

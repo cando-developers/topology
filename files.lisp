@@ -212,30 +212,30 @@
 
 (defun load-foldamer-conformations-map (filename)
   (let ((map (first (cpk:with-index (topology:bonded-internal
-                                      topology:fragment-internals
-                                      topology::dihedral
-                                      topology::angle
-                                      topology::bond
-                                      topology::out-of-focus-internals
-                                      topology::name)
-                       (cpk:tracking-refs ()
-                                            (cpk:decode-file filename))))))
+                                     topology:fragment-internals
+                                     topology::dihedral
+                                     topology::angle
+                                     topology::bond
+                                     topology::out-of-focus-internals
+                                     topology::name)
+                      (cpk:tracking-refs ()
+                                         (cpk:with-interning ()
+                                           (cpk:decode-file filename)))))))
     map
-    #+(or)
-    (let* ((fragment-matches (make-hash-table :test 'equal))
-           (monomer-context-to-fragment-conformations (make-hash-table :test 'equal)))
-      (format t "map = ~s~%" map)
-      (maphash (lambda (key value)
-                 (let ((new-key (cons (intern (string (car key)) :keyword) (intern (string (cdr key)) :keyword))))
-                   (setf (gethash new-key fragment-matches) value)))
-               (topology:fragment-matches map))
-      (maphash (lambda (key value)
-                 (let ((new-key (intern (string key) :keyword)))
-                   (setf (gethash new-key monomer-context-to-fragment-conformations) value)))
-               (topology:monomer-context-to-fragment-conformations map))
-      (make-instance 'topology:matched-fragment-conformations-map
-                     :fragment-matches fragment-matches
-                     :monomer-context-to-fragment-conformations monomer-context-to-fragment-conformations))))
+    #+(or)(let* ((fragment-matches (make-hash-table :test 'equal))
+                 (monomer-context-to-fragment-conformations (make-hash-table :test 'equal)))
+            (format t "map = ~s~%" map)
+            (maphash (lambda (key value)
+                       (let ((new-key (cons (intern (string (car key)) :keyword) (intern (string (cdr key)) :keyword))))
+                         (setf (gethash new-key fragment-matches) value)))
+                     (topology:fragment-matches map))
+            (maphash (lambda (key value)
+                       (let ((new-key (intern (string key) :keyword)))
+                         (setf (gethash new-key monomer-context-to-fragment-conformations) value)))
+                     (topology:monomer-context-to-fragment-conformations map))
+            (make-instance 'topology:matched-fragment-conformations-map
+                           :fragment-matches fragment-matches
+                           :monomer-context-to-fragment-conformations monomer-context-to-fragment-conformations))))
 
 (defun foldamer-extract-conformations (&key (path *conformations-path*) spiros (verbose t))
   (format t "Extracting conformations for the path: ~a~%" path)

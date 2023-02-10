@@ -34,7 +34,10 @@
             for index from 0
             for monomer across (monomers oligomer)
             for monomer-context = (topology:foldamer-monomer-context monomer oligomer foldamer)
-            for fragment-conformations = (gethash monomer-context (topology:monomer-context-to-fragment-conformations matched-fragment-conformations-map))
+            for fragment-conformations = (let ((fc (gethash monomer-context (topology:monomer-context-to-fragment-conformations matched-fragment-conformations-map))))
+                                           (unless fc
+                                             (error "Could not find monomer-context ~s" monomer-context))
+                                           fc)
             for monomer-shape = (make-instance 'monomer-shape
                                                :monomer monomer
                                                :monomer-context monomer-context
@@ -105,8 +108,12 @@
 (defun random-fragment-conformation-index (oligomer-shape)
   (let* ((root (the-root-monomer oligomer-shape))
          (root-monomer-shape (gethash root (monomer-shape-map oligomer-shape))))
-    (setf (fragment-conformation-index root-monomer-shape) (random (length (topology:fragments (fragment-conformations root-monomer-shape)))))
-    (random-fragment-conformation-index-impl root-monomer-shape oligomer-shape)))
+    (format t "root-monomer-shape ~a~%" root-monomer-shape)
+    (let* ((fragment-conformations (fragment-conformations root-monomer-shape)))
+      (format t "fragment-conformations: ~a~%" fragment-conformations)
+      (setf (fragment-conformation-index root-monomer-shape)
+            (random (length (topology:fragments fragment-conformations))))
+      (random-fragment-conformation-index-impl root-monomer-shape oligomer-shape))))
 
 
 (defun build-shape (oligomer-shape)
@@ -114,8 +121,10 @@
          (conf (topology:make-conformation oligomer))
          (fragment-conformations (matched-fragment-conformations-map oligomer-shape)))
     (topology::fill-internals-from-oligomer-shape conf fragment-conformations oligomer-shape)
-    (topology:zero-all-atom-tree-external-coordinates conf)
-    (topology:build-all-atom-tree-external-coordinates conf)
-    (topology:copy-joint-positions-into-atoms conf)
-    (topology:aggregate conf)))
+    #+(or)(topology:zero-all-atom-tree-external-coordinates conf)
+    (let ((coordinates (chem:make-coordinates (topology:energy-function conf))))
+      (topology:build-all-atom-tree-external-coordinates conf coordinates)
+      (warn "Handle copying vector into atoms")
+      (chem:energy-function/save-coordinates-from-vector (topology:energy-function conf) coordinates)
+      (topology:aggregate conf))))
 
