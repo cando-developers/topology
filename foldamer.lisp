@@ -200,13 +200,17 @@
 
 (defclass foldamer ()
   ((topologys :initform nil :initarg :topologys :accessor topologys)
+   (force-field-name :initform :smirnoff :initarg :force-field-name :accessor force-field-name)
    (training-oligomer-spaces :initarg :training-oligomer-spaces :accessor training-oligomer-spaces)))
+
+(defmethod topology:oligomer-force-field-name ((foldamer foldamer))
+  (force-field-name foldamer))
 
 (cando:make-class-save-load foldamer)
 
 (defparameter *foldamers* (make-hash-table))
 
-(defun define-foldamer (name contexts)
+(defun define-foldamer (name contexts &key (force-field-name :smirnoff))
   (let ((total-sequences 0)
         (topologys nil)
         (foldamer (make-instance 'foldamer)))
@@ -230,7 +234,8 @@
                                                :monomer-context-matcher monomer-context-matcher)))))))
       (reinitialize-instance foldamer
                              :topologys topologys
-                             :training-oligomer-spaces training-oligomer-spaces)
+                             :training-oligomer-spaces training-oligomer-spaces
+                             :force-field-name force-field-name)
       (setf (gethash name *foldamers*)
             foldamer))))
 
@@ -440,7 +445,7 @@
       (t (format flog "unknown-joint ~a ~a~%" name joint)))))
 
 
-(defun out-of-focus-atresidue-internals (atmolecule focus-atresidue flog)
+(defun out-of-focus-atresidue-internals (atmolecule focus-atresidue flog atresidue-to-in-coupling-names)
   "Extract the out-of-focus internals, these are internal coordinates in atresidues that are connected to the focus-atresidue
 by through a parent or grandparent"
   (let ((joint-to-atresidue (make-hash-table)))
@@ -476,17 +481,23 @@ by through a parent or grandparent"
                                                             (eq focus-atresidue grandparent-atresidue)
                                                             #+(or)(eq focus-atresidue great-grandparent-atresidue))
                                                         (vector-push-extend (extract-one-internal joint flog) internals-vector)
-                                                        (return-from out-of-focus-internals internals-vector))))))
-                       (setf (gethash (topology:stereoisomer-name atresidue) out-of-focus-internals) internals-vector))))))
+                                                        (return-from out-of-focus-internals internals-vector)))
+                                               finally (progn
+                                                         (format t "incomplete internals-vector ~s~%" internals-vector)
+                                                         (return-from out-of-focus-internals internals-vector)))))
+                       (unless internals-vector
+                         (error "The internals-vector for (topology:stereoisomer-name atresidue) ~a is NIL" (topology:stereoisomer-name atresidue)))
+                       (setf (gethash (topology:stereoisomer-name atresidue) out-of-focus-internals) internals-vector
+                             (gethash (gethash atresidue atresidue-to-in-coupling-names) out-of-focus-internals) internals-vector))))))
       out-of-focus-internals)))
 
-(defun extract-focus-atresidue-internals (focus-atresidue atmolecule total-count flog)
+(defun extract-focus-atresidue-internals (focus-atresidue atmolecule total-count flog atresidue-to-in-coupling-name)
   "Extract the internal coordinates for the atresidue.
 Also extract the out-of-focus-internals, the internals that leave the focus residue but have a parent or grandparent in the focus residue.
 We need these to match fragment internals with each other later."
   (let* ((internals (loop for joint across (topology:joints focus-atresidue)
                           collect (extract-one-internal joint flog)))
-         (out-of-focus-internals (out-of-focus-atresidue-internals atmolecule focus-atresidue flog)))
+         (out-of-focus-internals (out-of-focus-atresidue-internals atmolecule focus-atresidue flog atresidue-to-in-coupling-name)))
     (make-instance 'topology:fragment-internals
                    :index total-count
                    :internals (coerce internals 'vector)
@@ -530,6 +541,14 @@ We need these to match fragment internals with each other later."
                      (focus-residue-index (gethash focus-monomer monomer-positions))
                      (ataggregate (topology:ataggregate conf))
                      (atmolecule (aref (topology:atmolecules ataggregate) 0))
+                     (atresidue-to-in-coupling-name (loop with ht = (make-hash-table)
+                                                          for coupling across (topology:couplings oligomer)
+                                                          for target-monomer = (topology:target-monomer coupling)
+                                                          for target-plug-name = (topology:target-plug-name coupling)
+                                                          for target-monomer-index = (gethash target-monomer monomer-positions)
+                                                          for atresidue = (aref (topology:atresidues atmolecule) target-monomer-index)
+                                                          do (setf (gethash atresidue ht) target-plug-name)
+                                                          finally (return ht)))
                      (focus-atresidue (aref (topology:atresidues atmolecule) focus-residue-index))
                      (total-count (topology:total-count fragment-conformations)))
                 (with-open-file (fout svg-file :direction :output :if-exists :supersede)
@@ -557,12 +576,14 @@ We need these to match fragment internals with each other later."
                                (format flog "Found a starting geometry for total-count: ~a~%" total-count)
                                (let ((data-items nil)
                                      (maybe-bad-geometry (topology:bad-geometry-p agg)))
+                                 (sdf:write-sdf-stream agg fsdf :name trainer-context :data-items (list* (cons "total-count index" total-count) data-items))
+                                 (finish-output fsdf)
                                  (if (null maybe-bad-geometry)
                                      (let ((coordinates (chem:make-coordinates (topology:energy-function conf))))
                                        (chem:atom-table/read-atom-coordinates (chem:atom-table (topology:energy-function conf)) coordinates)
                                        (format flog "Passed (not (topology:bad-geometry-p agg))~%")
                                        (topology::update-joint-tree-internal-coordinates conf coordinates)
-                                       (let* ((fragment-internals (extract-focus-atresidue-internals focus-atresidue atmolecule total-count flog ))
+                                       (let* ((fragment-internals (extract-focus-atresidue-internals focus-atresidue atmolecule total-count flog atresidue-to-in-coupling-name))
                                               (seen-index (topology:seen-fragment-internals fragment-conformations fragment-internals)))
                                          (let ((bad-fragment-internals (topology:bad-fragment-internals fragment-internals)))
                                            (if (null bad-fragment-internals)
@@ -586,7 +607,7 @@ We need these to match fragment internals with each other later."
                                      (progn
                                        (push (cons "status" (format nil "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a  ~a~%" total-count maybe-bad-geometry)) data-items)
                                        (format flog "Failed (not (topology:bad-geometry-p agg)) for conformation: ~a  ~a~%" total-count maybe-bad-geometry)))
-                                 (sdf:write-sdf-stream agg fsdf :name trainer-context :data-items (list* (cons "total-count index" total-count) data-items)))
+                                 )
                                (incf total-count)))))
                 (setf (topology:total-count fragment-conformations) total-count)
                 (topology:save-fragment-conformations fragment-conformations internals-file)
@@ -600,7 +621,8 @@ We need these to match fragment internals with each other later."
                     (if (/= total-count 0)
                         (format fout ":hit-to-total-ratio ~5,4f " (/ (float fragment-conformations-length 1.0d0) (float total-count 1.0d0)))
                         (format fout ":hit-to-total-ratio 0.0 "))
-                    (format fout ")~%")))))))))))
+                    (format fout ")~%")))
+                conf))))))))
 
 
 (defgeneric load-force-field (force-field)
@@ -643,7 +665,6 @@ For now the force-field argument is T - but we may want to specialize on a folda
 (defun check-fragment-conformations-map (filename)
   (let* ((foldamer-filename (merge-pathnames *foldamer-path* filename))
          (foldamer (cando:load-cando foldamer-filename))
-         (fragment-conformations-map (make-instance 'topology:fragment-conformations-map))
          (left-count 0)
          (right-count 0))
     (loop for trainer-name in (valid-trainer-contexts foldamer)
@@ -662,9 +683,9 @@ For now the force-field argument is T - but we may want to specialize on a folda
                                                         (d1 (/ (topology:dihedral j1) 0.0174533))
                                                         (d2 (/ (topology:dihedral j2) 0.0174533))
                                                         (d3 (/ (topology:dihedral j3) 0.0174533))
-                                                        (ad12 (foldamer::angle-difference d1 d2))
-                                                        (ad23 (foldamer::angle-difference d2 d3))
-                                                        (ad31 (foldamer::angle-difference d3 d1)))
+                                                        (ad12 (topology:degree-difference d1 d2))
+                                                        (ad23 (topology:degree-difference d2 d3))
+                                                        (ad31 (topology:degree-difference d3 d1)))
                                                    (if (> ad12 0)
                                                        (incf right-count)
                                                      (incf left-count))

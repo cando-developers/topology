@@ -23,5 +23,5 @@
                (:file "badgeom")
                (:file "foldamer")
                (:file "shape")
-	       (:file "files")
+               (:file "files")
                (:file "graphviz")))

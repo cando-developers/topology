@@ -1,8 +1,58 @@
 (in-package :topology)
 
+(defparameter *2pi-s* (* 2.0s0 (float PI 1.0s0)))
+(defparameter *pi-s* (float PI 1.0s0))
+(defparameter *-pi-s* (- (float PI 1.0s0)))
+
+(defun deg-to-rad (deg)
+  (* deg 0.0173433s0))
+
+(defun rad-to-deg (rad)
+  (/ rad 0.0173433s0))
+
+(defun radians-difference (b1 b2)
+  (let ((diff (float (mod (- b2 b1) *2pi-s*) 1.0s0)))
+    (if (< diff *-pi-s*)
+        (incf diff *2pi-s*)
+        (if (> diff *pi-s*)
+            (decf diff *2pi-s*)
+            diff))))
+
+(defun radians-add (r1 r2)
+  (let ((sum (float (mod (+ r2 r1) *2pi-s*) 1.0s0)))
+    (if (< sum *-pi-s*)
+        (incf sum *2pi-s*)
+        (if (> sum *pi-s*)
+            (decf sum *2pi-s*)
+            sum))))
+
+(defmacro radians-incf (place rad)
+  `(setf ,place (radians-add ,place ,rad)))
+
+(defun degree-difference (b1 b2)
+  (let ((diff (float (mod (- b2 b1) 360.0s0) 1.0s0)))
+    (if (< diff -180.0s0)
+        (incf diff 360.0s0)
+        (if (> diff 180.0s0)
+            (decf diff 360.0s0)
+            diff))))
+
+(defun degrees-add (b1 b2)
+  (let ((sum (float (mod (+ b2 b1) 360.0s0) 1.0s0)))
+    (if (< sum -180.0s0)
+        (incf sum 360.0s0)
+        (if (> sum 180.0s0)
+            (decf sum 360.0s0)
+            sum))))
+
+(defun angle-sub (b2 b1)
+  (degree-difference b1 b2))
+
 (defclass internal (serial:serializable)
   ((name :initarg :name :accessor name)
    ))
+
+(defgeneric copy-internal (internal))
 
 (cando:make-class-save-load
  internal
@@ -21,12 +71,19 @@
    (angle :initarg :angle :accessor angle)
    (dihedral :initarg :dihedral :accessor dihedral)))
 
+(defmethod copy-internal ((internal bonded-internal))
+  (make-instance 'bonded-internal
+                 :name (name internal)
+                 :bond (bond internal)
+                 :angle (angle internal)
+                 :dihedral (dihedral internal)))
+
 (cando:make-class-save-load
  bonded-internal
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
-     (format stream "~a" (name obj)))))
+     (format stream "~a :d ~5,2f" (name obj) (rad-to-deg (dihedral obj))))))
 
 (defclass complex-bonded-internal (bonded-internal)
   ())
@@ -35,10 +92,21 @@
 
 (defclass fragment-internals (serial:serializable)
   ((index :initarg :index :accessor index)
+   (probability :initarg :probability :accessor probability)
    (internals :initarg :internals :accessor internals)
    (out-of-focus-internals :initarg :out-of-focus-internals :accessor out-of-focus-internals)))
 
 (cando:make-class-save-load fragment-internals)
+
+(defun copy-fragment-internals (fragment-internals)
+  (make-instance 'fragment-internals
+                 :index (index fragment-internals)
+                 :internals (copy-seq (internals fragment-internals))
+                 :out-of-focus-internals (let ((ht (make-hash-table)))
+                                           (maphash (lambda (key value)
+                                                      (setf (gethash key ht) (copy-seq value)))
+                                                    (out-of-focus-internals fragment-internals))
+                                           ht)))
 
 (defclass fragment-conformations (serial:serializable)
   ((focus-monomer-name :initarg :focus-monomer-name :accessor focus-monomer-name)
@@ -156,27 +224,31 @@
                         (to-deg (topology:dihedral internal))))
                ))
     (format finternals "end-conformation~%")
-    (maphash (lambda (key internals)
-               (format finternals "out-of-focus following-monomer ~a~%" key)
-               (loop for internal across internals
-                     do (cond
-                          ((typep internal 'topology:jump-internal)
-                           (format finternals "jump-joint ~a~%" (topology:name internal)))
-                          ((typep internal 'topology:complex-bonded-internal)
-                           (format finternals "complex-bonded-joint ~a ~8,3f ~8,3f ~8,3f~%"
-                                   (topology:name internal)
-                                   (topology:bond internal)
-                                   (to-deg (topology:angle internal))
-                                   (to-deg (topology:dihedral internal))))
-                          ((typep internal 'topology:bonded-internal)
-                           (format finternals "bonded-joint ~a ~8,3f ~8,3f ~8,3f~%"
-                                   (topology:name internal)
-                                   (topology:bond internal)
-                                   (to-deg (topology:angle internal))
-                                   (to-deg (topology:dihedral internal))))
-                          )))
-             (topology:out-of-focus-internals fragment-internals))))
-
+    (let ((unique-internals (let (unique-internals)
+                              (maphash (lambda (key internals)
+                                         (declare (ignore key))
+                                         (pushnew internals unique-internals))
+                                       (topology:out-of-focus-internals fragment-internals))
+                              unique-internals)))
+      (loop for internals in unique-internals
+            do (when internals
+                 (loop for internal across internals
+                       do (cond
+                            ((typep internal 'topology:jump-internal)
+                             (format finternals "jump-joint ~a~%" (topology:name internal)))
+                            ((typep internal 'topology:complex-bonded-internal)
+                             (format finternals "complex-bonded-joint ~a ~8,3f ~8,3f ~8,3f~%"
+                                     (topology:name internal)
+                                     (topology:bond internal)
+                                     (to-deg (topology:angle internal))
+                                     (to-deg (topology:dihedral internal))))
+                            ((typep internal 'topology:bonded-internal)
+                             (format finternals "bonded-joint ~a ~8,3f ~8,3f ~8,3f~%"
+                                     (topology:name internal)
+                                     (topology:bond internal)
+                                     (to-deg (topology:angle internal))
+                                     (to-deg (topology:dihedral internal))))
+                            )))))))
 
 (defgeneric fill-joint-internals (joint internal))
 

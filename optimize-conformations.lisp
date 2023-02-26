@@ -17,14 +17,6 @@
                  (return-from indexes)))))
     (values monomer-context-index monomer-contexts-vector)))
 
-(defun angle-difference (b1 b2)
-  (let ((diff (float (mod (- b2 b1) 360.0s0) 1.0s0)))
-    (if (< diff -180.0s0)
-	(incf diff 360.0s0)
-	(if (> diff 180.0s0)
-	    (decf diff 360.0s0)
-	    diff))))
-
 (defparameter *angle-threshold* 30.0s0)
 
 (defun fragments-match-p (before-fragment after-fragment after-fragment-focus-monomer-name)
@@ -42,7 +34,7 @@
                  (error "Atom names don't match ~s ~s" before-bonded-internal after-bonded-internal))
                (let* ((diha (float (/ (float (topology:dihedral before-bonded-internal) 1.0s0) 0.0174533s0) 1.0s0))
                       (dihb (float (/ (float (topology:dihedral after-bonded-internal) 1.0s0) 0.0174533s0) 1.0s0))
-                      (delta-angle (float (abs (angle-difference diha dihb)) 1.0s0)))
+                      (delta-angle (float (abs (topology:degree-difference diha dihb)) 1.0s0)))
                  (when (> delta-angle *angle-threshold*)
                    (return-from fragments-match-p nil)))))
     t))
@@ -90,7 +82,7 @@
                                                      for after-internal = (elt (topology:internals after-fragment) ii)
                                                      for before-dih = (float (/ (topology:dihedral before-internal) 0.0174533) 1.0s0)
                                                      for after-dih = (float (/ (topology:dihedral after-internal) 0.0174533) 1.0s0)
-                                                     for delta-dih = (abs (foldamer:angle-difference before-dih after-dih))
+                                                     for delta-dih = (abs (topology:degree-difference before-dih after-dih))
                                                      collect (list (topology:name after-internal) after-dih (if (< delta-dih *angle-threshold*) "MATCH" "     ")))
                                                #+(or)(break "out-of-focus-internals ~a" out-of-focus-internals)
                                                )))))
@@ -108,9 +100,8 @@
                         (setf total-after-fragment-match-vector (make-array (1+ before-fragment-index) :adjustable t)))
                        ((<= (length total-after-fragment-match-vector) before-fragment-index)
                         (adjust-array total-after-fragment-match-vector (1+ before-fragment-index))))
-                     (setf (aref total-after-fragment-match-vector before-fragment-index)
-                           after-fragment-match-vector)
-                     (setf (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map)) total-after-fragment-match-vector)))))
+                     (setf (aref total-after-fragment-match-vector before-fragment-index) after-fragment-match-vector
+                           (gethash fragment-match-key (topology:fragment-matches fragment-conformations-map)) total-after-fragment-match-vector)))))
     fragment-conformations-map))
 
 
@@ -198,10 +189,11 @@
                                                   (eq (topology:id (topology:target-monomer coupling))
                                                       (topology:id (topology:target-monomer in-coupling))))
                                           append (new-over-matching-oligomers in-training-oligomer-space
-                                                                          training-oligomer-space)
+                                                                              training-oligomer-space)
                                         #+(or)(all-matching-momomer-contexts-in-matching-training-oligomer-space-pairs
                                                in-training-oligomer-space
                                                training-oligomer-space)))))))
+
 (defun optimize-fragment-conformations-map (simple-fragment-conformations-map foldamer verbose)
   (let ((all-matching-monomer-contexts (all-matching-monomer-contexts foldamer)))
     (when verbose (format t "There are ~a matching monomer-contexts~%" (length all-matching-monomer-contexts)))

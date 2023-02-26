@@ -16,7 +16,12 @@
   ((children :initform nil :initarg :children :accessor children)
    ))
 
-(cando:make-class-save-load bonded-joint-template)
+(cando:make-class-save-load
+ bonded-joint-template
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a" (atom-name obj)))))
 
 (defun make-bonded-joint-template (constitution-atoms-index &key atom-name parent)
   (make-instance 'bonded-joint-template
@@ -27,7 +32,12 @@
 (defclass in-plug-bonded-joint-template (bonded-joint-template)
   ((in-plug :initarg :in-plug :accessor in-plug)))
 
-(cando:make-class-save-load in-plug-bonded-joint-template)
+(cando:make-class-save-load
+ in-plug-bonded-joint-template
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a" (atom-name obj)))))
 
 (defun make-in-plug-bonded-joint-template (constitution-atoms-index &key atom-name parent in-plug)
   (make-instance 'in-plug-bonded-joint-template
@@ -39,7 +49,12 @@
 (defclass complex-bonded-joint-template (bonded-joint-template)
   ((input-stub-joints :initform (make-array 2) :initarg :input-stub-joints :accessor input-stub-joints)))
 
-(cando:make-class-save-load complex-bonded-joint-template)
+(cando:make-class-save-load
+ complex-bonded-joint-template
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a" (atom-name obj)))) )
 
 (defun make-complex-bonded-joint-template (constitution-atoms-index &key atom-name stub-joints)
   (cond
@@ -81,6 +96,13 @@
 
 (defun sibling (joint-template index)
   (nth index (children joint-template)))
+
+
+(defun walk-joint-template (joint-template callback)
+  "Walk a joint-template tree"
+  (funcall callback joint-template)
+  (loop for child in (children joint-template)
+        do (walk-joint-template child callback)))
 
 (defun new-joint-template-factory (parent-template node in-plug)
   (let* ((atom-name (topology:name node))

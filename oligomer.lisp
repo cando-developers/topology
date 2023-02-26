@@ -9,6 +9,7 @@
          (constitution-atoms (topology:constitution-atoms constitution))
          (atoms (make-array (length constitution-atoms)))
          (named-atoms (make-hash-table)))
+    ;; Add atoms to the residue
     (loop for index below (length constitution-atoms)
           for constitution-atom = (elt constitution-atoms index)
           for atm-name = (topology:atom-name constitution-atom)
@@ -17,6 +18,7 @@
           do (chem:add-matter residue atm)
           do (setf (elt atoms index) atm
                    (gethash atm-name named-atoms) atm))
+    ;; Create bonds between atoms
     (loop for index below (length constitution-atoms)
           for constitution-atom = (elt constitution-atoms index)
           for atm1-index = (topology:index constitution-atom)
@@ -26,11 +28,13 @@
                    for atm2 = (elt atoms atm2-index)
                    when (< atm1-index atm2-index)
                      do (chem:bond-to atm1 atm2 (topology:order bond))))
+    ;; Define the :chiral atoms
     (loop for index below (length (stereoisomer-atoms topology))
           for stereoisomer-atom = (elt (stereoisomer-atoms topology) index)
           for atom-name = (atom-name stereoisomer-atom)
           for atm = (gethash atom-name named-atoms)
           for stereochemistry-type = :chiral
+          do (unless atm (break "Could not find atm named ~a in ~a" atom-name named-atoms))
           do (chem:set-stereochemistry-type atm stereochemistry-type)
           do (chem:set-configuration atm (configuration stereoisomer-atom)))
     ;; assign stereochem for prochiral atoms so they aren't random
@@ -40,6 +44,8 @@
         (when (not (eq (chem:get-stereochemistry-type atm) :chiral))
           (chem:set-stereochemistry-type atm :prochiral)
           (chem:set-configuration atm :left-handed))))
+    ;; Add restraints to the residue
+    ;;  dihedral restraints is all we can specify here for the time being
     (loop for restraint in (restraints topology)
           for rr = (etypecase restraint
                      (dihedral-restraint
@@ -180,11 +186,8 @@
                                        monomers-to-topologys
                                        monomer-positions)))
 
-
-(defparameter *default-molecule-force-field-name* :smirnoff)
-
-(defun set-default-molecule-force-field-name (name)
-  (setf *default-molecule-force-field-name* name))
+(defgeneric oligomer-force-field-name (foldamer)
+  (:documentation "Return the name of the force field used by the foldamer"))
 
 (defun build-molecule (oligomer)
   (let ((root-monomer (root-monomer oligomer))
@@ -200,7 +203,7 @@
           else
             do (pushnew coupling ring-couplings)) ; Only add ring coupling when unique
     (let* ((molecule (let ((mol (chem:make-molecule :mol)))
-                       (chem:setf-force-field-name mol *default-molecule-force-field-name*)
+                       (chem:setf-force-field-name mol (oligomer-force-field-name (foldamer (oligomer-space oligomer))))
                        mol))
            (root-topology (let ((top (monomer-topology root-monomer oligomer)))
                             (unless (typep top 'topology:topology)

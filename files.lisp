@@ -19,9 +19,9 @@
          (hits (getf done-data :hits)))
     (or (null done-data) (or (< done-steps steps) (= hits 0)))))
 
-(defun max-finished-steps (spiros)
+(defun max-finished-steps (foldamer)
   (let ((max-finished-steps 0)
-        (valid-trainer-contexts (foldamer:valid-trainer-contexts spiros)))
+        (valid-trainer-contexts (foldamer:valid-trainer-contexts foldamer)))
     (loop for context in valid-trainer-contexts
           do (multiple-value-bind (input-file done-file)
                  (foldamer:calculate-files context)
@@ -35,8 +35,8 @@
     max-finished-steps))
 
 
-(defun needs-extract-conformations (path spiros)
-  (let ((valid-trainer-contexts (foldamer:valid-trainer-contexts spiros))
+(defun needs-extract-conformations (path foldamer)
+  (let ((valid-trainer-contexts (foldamer:valid-trainer-contexts foldamer))
         (conformations-pathname  path))
     (if (null (probe-file conformations-pathname))
         t ;; Need to update conformations if file doesn't exist
@@ -51,14 +51,14 @@
                        (setf latest-done-file-write-date (max latest-done-file-write-date (file-write-date done-file))))))
           (< conformations-write-date latest-done-file-write-date)))))
 
-(defun foldamer-update-trainers (spiros &key remove-unused force-save)
-  (foldamer:maybe-remove-unused-trainers spiros #P"./" :doit remove-unused)
-  (foldamer:generate-training-oligomers spiros #P"./" :force-save force-save))
+(defun foldamer-update-trainers (foldamer &key remove-unused force-save)
+  (foldamer:maybe-remove-unused-trainers foldamer #P"./" :doit remove-unused)
+  (foldamer:generate-training-oligomers foldamer #P"./" :force-save force-save))
 
-(defun foldamer-status (&key spiros)
-  (let* ((trainer-contexts (foldamer:valid-trainer-contexts spiros))
+(defun foldamer-status (&key foldamer)
+  (let* ((trainer-contexts (foldamer:valid-trainer-contexts foldamer))
          (trainer-done-data (make-hash-table :test 'equal))
-         (max-finished-steps (max-finished-steps spiros)))
+         (max-finished-steps (max-finished-steps foldamer)))
     (loop for trainer-context in trainer-contexts
           for done-data = (done-data trainer-context)
           do (setf (gethash trainer-context trainer-done-data) done-data))
@@ -96,20 +96,20 @@
              (node-index obj) (job-index obj)))))
 
 
-(defun verify-all-training-molecules-can-be-parameterized (spiros)
+(defun verify-all-training-molecules-can-be-parameterized (the-foldamer)
   "Build every training oligomer and generate an energy function for it to make sure that all training molecules can be parameterized"
   (foldamer:load-force-field t)
   (let* ((trainer-contexts (progn
                              (format t "Calculating valid trainer contexts~%")
-                             (foldamer:valid-trainer-contexts spiros)))
-         (monomer-context-to-oligomer-map (monomer-context-to-oligomer-map spiros)))
+                             (foldamer:valid-trainer-contexts the-foldamer)))
+         (monomer-context-to-oligomer-map (monomer-context-to-oligomer-map the-foldamer)))
     (loop for trainer-context in trainer-contexts
           for oligomer = (gethash trainer-context monomer-context-to-oligomer-map)
           for agg = (topology:build-molecule oligomer)
           do (format t "trainer-context ~a~%" trainer-context)
           do (chem:make-energy-function :matter agg))))
 
-(defun foldamer-setup (spiros
+(defun foldamer-setup (the-foldamer
                        &key
                          (jobs 1)
                          (nodes-per-job 12)
@@ -119,8 +119,8 @@
                          (finished-steps 2 finished-steps-p)
                          (advance-steps 10 advance-steps-p))
   (format t "Updating trainers~%")
-  (foldamer-update-trainers spiros :remove-unused t)
-  (let* ((max-finished-steps (max-finished-steps spiros))
+  (foldamer-update-trainers the-foldamer :remove-unused t)
+  (let* ((max-finished-steps (max-finished-steps the-foldamer))
          (steps (cond
                   ((and (null advance-steps-p) finished-steps-p) finished-steps)
                   ((and (null finished-steps-p) advance-steps-p) (+ max-finished-steps advance-steps))
@@ -129,13 +129,13 @@
                   (t (error "You must provide only one option advance-steps or finished-steps or neither"))))
          (trainer-contexts (progn
                              (format t "Calculating valid trainer contexts~%")
-                             (foldamer:valid-trainer-contexts spiros)))
+                             (foldamer:valid-trainer-contexts the-foldamer)))
          (total-nodes (* jobs nodes-per-job))
          (threads-per-node (ceiling (length trainer-contexts) nodes-per-job))
          (node-work (make-hash-table :test 'eql))
          (job-nodes (make-hash-table :test 'eql))
          (trainer-count 0)
-         (monomer-context-to-oligomer-map (monomer-context-to-oligomer-map spiros))
+         (monomer-context-to-oligomer-map (monomer-context-to-oligomer-map the-foldamer))
          (unsorted-trainers-that-need-work (loop for trainer-context in trainer-contexts
                                                  when (needs-work trainer-context steps)
                                                    collect (let* ((oligomer (let ((ol (gethash trainer-context monomer-context-to-oligomer-map)))
@@ -237,14 +237,14 @@
                            :fragment-matches fragment-matches
                            :monomer-context-to-fragment-conformations monomer-context-to-fragment-conformations))))
 
-(defun foldamer-extract-conformations (&key (path *conformations-path*) spiros (verbose t))
+(defun foldamer-extract-conformations (&key (path *conformations-path*) foldamer (verbose t))
   (format t "Extracting conformations for the path: ~a~%" path)
   (let ((foldamer-conformations-map (foldamer:extract-fragment-conformations-map "./")))
     (format t "Matching fragment conformations~%")
-    (let ((matched (foldamer:optimize-fragment-conformations-map foldamer-conformations-map spiros verbose)))
+    (let ((matched (foldamer:optimize-fragment-conformations-map foldamer-conformations-map foldamer verbose)))
       (loop while (> (foldamer-report-conformations matched) 0)
             do (format t "Eliminating missing matches~%")
-            do (setf matched (foldamer-eliminate-missing-fragment-matches matched spiros)))
+            do (setf matched (foldamer-eliminate-missing-fragment-matches matched foldamer)))
       (format t "Saving ~a~%" path)
       (save-foldamer-conformations-map matched path)
       (values matched foldamer-conformations-map)
@@ -310,7 +310,7 @@
              (format t " ~4a ~7,1f" name dih)
              (when compare
                (let ((other-dih (/ (topology:dihedral (elt compare index)) 0.0174533)))
-                 (format t "   ~7,1f  ~a" other-dih (if (< (abs (foldamer:angle-difference dih other-dih)) 30.0) "MATCH" "---"))))
+                 (format t "   ~7,1f  ~a" other-dih (if (< (abs (topology:degree-difference dih other-dih)) 30.0) "MATCH" "---"))))
              (format t "~%"))))
 
 
@@ -357,7 +357,7 @@
                            for after-internals = (topology:internals after-fragment-conformation)
                            do (dump-internals (format nil "after internals #~a" after-fragment-index) after-internals out-of-focus-internals)))))))))
 
-(defun foldamer-check-conformations (&optional (path #P"./") spiros)
+(defun foldamer-check-conformations (&optional (path #P"./") foldamer)
   (format t "checking conformations~%")
   (let ((foldamer-conformations-map (foldamer::check-fragment-conformations-map path)))
     ))
@@ -372,9 +372,7 @@
     (loop for task in tasks
           do (lparallel:receive-result channel))))
 
-(defun foldamer-run-node (node-index &key (steps 2) testing (parallel t) (no-fail t))
-  (format t "Loading force-field~%")
-  (foldamer:load-force-field t)
+(defun do-foldamer-run-node (node-index &key (steps 2) testing (parallel t) (no-fail t))
   (let* ((print-lock (bordeaux-threads:make-recursive-lock))
          (all-node-work (cando:load-cando "node-work.cando"))
          (node-trainers (gethash node-index all-node-work))
@@ -382,7 +380,7 @@
          (foldamer (cando:load-cando foldamer-dat-pathname)))
     (flet ((one-trainer (trainer-job node-index)
              (bordeaux-threads:with-recursive-lock-held (print-lock)
-                   (format t "About to build trainer ~a~%" trainer-job))
+               (format t "About to build trainer ~a~%" trainer-job))
              (let* ((worker-index (lparallel:kernel-worker-index))
                     (trainer-context (trainer-context trainer-job))
                     (input-file (merge-pathnames (make-pathname :directory '(:relative "data")
@@ -400,12 +398,17 @@
                                      (format t "There was an error in build-trainer: ~s~%" err)
                                      (let ((clasp-debug:*frame-filters* nil))
                                        (clasp-debug:print-backtrace)))))
-                           (progn
-                             (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :build-info-msg (list :node-index node-index :verbose nil))))
-                     (progn
-                       (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :verbose nil))))))))
+                         (progn
+                           (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :build-info-msg (list :node-index node-index :verbose nil))))
+                       (progn
+                         (foldamer:build-trainer foldamer trainer-context :load-pathname input-file :steps steps :verbose nil))))))))
       (if parallel
           (parallel-map (lambda (trainer) (one-trainer trainer node-index)) node-trainers)
-          (mapc (lambda (trainer) (one-trainer trainer node-index)) node-trainers))))
+          (mapc (lambda (trainer) (one-trainer trainer node-index)) node-trainers)))))
+
+(defun foldamer-run-node (node-index &key (steps 2) testing (parallel t) (no-fail t))
+  (format t "Loading force-field~%")
+  (foldamer:load-force-field t)
+  (do-foldamer-run-node node-index :steps steps :testing testing :parallel parallel :no-fail no-fail)
   (unless testing (sys:quit)))
 

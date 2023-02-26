@@ -9,6 +9,7 @@
   (:use #:common-lisp)
   (:nicknames #:ts)
   (:export
+   #:degree-difference
    #:constitution-atom-index
    #:atom-name
    #:element
@@ -163,7 +164,20 @@
    #:sketch-svg
    #:make-oligomer-space
    #:calculate-number-of-sequences
-   #:energy-function))
+   #:energy-function
+   #:copy-fragment-internals
+   #:copy-internal
+   #:deg-to-rad
+   #:rad-to-deg
+   #:radians-add
+   #:radians-incf
+   #:radians-difference
+   #:angle-sub
+   #:walk-joint-template
+   #:properties
+   #:degrees-add
+   #:probability
+   #:oligomer-force-field-name))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -211,7 +225,6 @@
    #:foldamer-describe-missing-fragment-matches
    #:monomer-contents-vector
    #:foldamer-describe-missing-match
-   #:angle-difference
    #:monomer-context
    #:monomer-context-to-oligomer-map
    #:topologys
@@ -221,7 +234,8 @@
    #:load-foldamer-conformations-map
    #:save-foldamer-conformations-map
    #:load-foldamer
-   #:save-foldamer))
+   #:save-foldamer
+   #:all-matching-monomer-contexts))
 
 
 (defpackage #:topology.graphviz
@@ -245,3 +259,5 @@
    #:make-graph
    #:node-id
    #:dot-svg-foldamer-joint-trees))
+
+

@@ -5,7 +5,6 @@
    (index :initarg :index :accessor index)
    (element :initarg :element :accessor element)
    (atom-type :initarg :atom-type :accessor atom-type)
-   (stereochemistry-type :initarg :stereochemistry-type :accessor stereochemistry-type)
    (properties :initform nil :initarg :properties :accessor properties)
    (bonds :initform nil :initarg :bonds :accessor bonds)))
 
@@ -200,7 +199,7 @@
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
-     (format stream ":id ~a :monomers ~a" (id obj) (monomers obj)))))
+     (format stream ":id ~a :monomers ~s" (id obj) (monomers obj)))))
 
 (defun number-of-stereoisomers (monomer)
   (length (monomers monomer)))

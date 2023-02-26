@@ -9,16 +9,16 @@ Create topology instances using a graph described using an s-expression.
                                  - CN (- HN1) (- HN2) - HN3))
 
 (topology:define-topology 'pro4 '((CAC C :plugs (-dkp.0)) (= OA)
-                                  - (CA :C :stereochemistry-type :chiral) (- HA)
+                                  - (CA :C :stereochemistry-type :both) (- HA)
                                   - CB (- HB1) (- HB2)
-                                  - (CG :C :stereochemistry-type :chiral)
+                                  - (CG :C :stereochemistry-type :both)
                                   (- (NG N :plugs (+side.0 +dkp.0)))
                                   (- (CGC C :plugs (+dkp.1)) = OG)
                                   - CD (- HD1) (- HD2) -
                                   (NA N :plugs (-dkp.1)) - CA ))
 
 (topology:define-topology 'pro '((C C :plugs (-dkp.0)) (= O)
-                                 - (CA C :stereochemistry-type :chiral) (- HA)
+                                 - (CA C :stereochemistry-type :both) (- HA)
                                  - CB (- HB1) (- HB2)
                                  - CG (- HG1) (- HG2)
                                  - CD (- HD1) (- HD2)
@@ -216,32 +216,46 @@ Create topology instances using a graph described using an s-expression.
 
 
 
-(defun build-stereoisomer (name chiral-atoms stereoisomer-index)
+(defun build-stereoisomer (name variable-chiral-atoms stereoisomer-index fixed-chiral-info)
   "Build a stereoisomer. Assemble a name for the stereiosomer using the name and
 the stereoisomer-index.   The stereoisomer-index is like a bit-vector that indicates
 the stereochemistry of this stereoisomer (0 is :S and 1 is :R).
 The name is constructed by appending \"{chiral-atom-name/(S|R),...}\".
 So if name is \"ALA\" and stereoisomer-index is 1 the name becomes ALA{CA/S}."
-  (if chiral-atoms
-      (let* ((configurations (loop for chiral-index below (length chiral-atoms)
+  (if (or variable-chiral-atoms fixed-chiral-info)
+      (let* ((configurations (loop for chiral-index below (length variable-chiral-atoms)
                                    for config = (if (logbitp chiral-index stereoisomer-index) :S :R)
                                    collect config))
-             (stereo-configurations (mapcar (lambda (atom config)
-                                              (make-instance 'stereoconfiguration
-                                                             :atom-name (atom-name atom)
-                                                             :configuration config))
-                                            chiral-atoms configurations))
+             (stereo-configurations (append
+                                     (mapcar (lambda (atom config)
+                                               (when (eq config :undefined-configuration)
+                                                 (error "Don't allow :undefined-configuration for ~a" atom))
+                                               (make-instance 'stereoconfiguration
+                                                              :atom-name (atom-name atom)
+                                                              :configuration config))
+                                             variable-chiral-atoms configurations)
+                                     (mapcar (lambda (info)
+                                               (let* ((constitution-atom (constitution-atom info))
+                                                      (name (atom-name constitution-atom))
+                                                      (type (type info)))
+                                                 #+(or)(format t "fixed-chiral-info: ~s ~s~%" name type)
+                                                 (when (eq type :undefined-configuration)
+                                                   (error "Don't allow :undefined-configuration for ~a" name))
+                                                 (make-instance 'stereoconfiguration
+                                                                :atom-name name
+                                                                :configuration type)))
+                                             fixed-chiral-info)))
              (new-name-string (format nil "~A~{~A~}"
                                       name
                                       (mapcar (lambda (atom config)
                                                 (declare (ignore atom))
                                                 (format nil "~A"
-                                                        (string config))) chiral-atoms configurations)))
+                                                        (string config))) variable-chiral-atoms configurations)))
              (new-name (intern new-name-string (symbol-package name))))
         #+(or)
         (progn
           (format t "name -> ~a~%" name)
-          (format t "chiral-atoms -> ~a~%" chiral-atoms)
+          (format t "variable-chiral-atoms -> ~a~%" variable-chiral-atoms)
           (format t "stereoisomer-index -> ~a~%" stereoisomer-index)
           (format t "new-name -> ~a~%" new-name))
         (make-instance 'stereoisomer
@@ -258,45 +272,52 @@ So if name is \"ALA\" and stereoisomer-index is 1 the name becomes ALA{CA/S}."
                        :configurations nil))))
 
 (defclass stereocenter-info ()
-  ((name :initarg :name :accessor name)
+  ((constitution-atom :initarg :constitution-atom :accessor constitution-atom)
    (type :initarg :type :accessor type)))
 
-(defun build-stereo-information (name chiral-constitution-atoms)
-  "Build stereoinformation from all of this and return it."
-  (let* ((chiral-atoms (loop for info in chiral-constitution-atoms
-                             when (eq (type info) :chiral)
-                               collect (name info)))
-         (number-of-chiral-atoms (length chiral-atoms))
-         (number-of-stereoisomers (expt 2 number-of-chiral-atoms)))
-    #+(or)
-    (progn
-      (format t "residue: ~s~%" residue)
-      (format t "root atom: ~s~%" root-atom)
-      (format t "chiral atoms: ~s~%" chiral-atoms)
-      (terpri)
-      (terpri))
-    (let ((stereoisomers (loop for stereoisomer-index below number-of-stereoisomers
-                               for stereoisomer = (build-stereoisomer name chiral-atoms stereoisomer-index)
-                               collect stereoisomer))
-          (prochiral-centers (loop for info in chiral-constitution-atoms
-                                   when (not (eq (type info)))
-                                     collect info)))
-      (values stereoisomers prochiral-centers))))
+(defmethod print-object ((obj stereocenter-info) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "~a ~a" (constitution-atom obj) (type obj))))
+
+
+(defun build-stereo-information (name stereocenter-info)
+  "Build stereoinformation from the stereocenter-info and return it."
+  (multiple-value-bind (variable-chiral-atoms fixed-chiral-info)
+      (loop for info in stereocenter-info
+            if (eq (type info) :both)
+              collect (name info) into variable-chiral-atoms
+            else
+              collect info into fixed-chiral-info
+            finally (return (values variable-chiral-atoms fixed-chiral-info)))
+    (let* ((number-of-variable-chiral-atoms (length variable-chiral-atoms))
+           (number-of-stereoisomers (expt 2 number-of-variable-chiral-atoms))) ; every chiral atom multiplies # stereoisomers
+      #+(or)
+      (progn
+        (format t "residue: ~s~%" residue)
+        (format t "root atom: ~s~%" root-atom)
+        (format t "chiral atoms: ~s~%" variable-chiral-atoms)
+        (terpri)
+        (terpri))
+      (let ((stereoisomers
+              (loop for stereoisomer-index below number-of-stereoisomers
+                    for stereoisomer = (build-stereoisomer name variable-chiral-atoms stereoisomer-index fixed-chiral-info)
+                    collect stereoisomer)))
+        stereoisomers))))
 
 (defun constitution-atoms-from-graph (graph)
   (let ((constitution-atoms (make-array (hash-table-count (nodes graph)))))
+    #+(or)(format t "graph = ~a~%" (name graph))
     (maphash (lambda (key node)
                (declare (ignore key))
                (when (typep node 'atom-node)
                  (let* ((property-list (property-list node))
-                        (stereochemistry-type (getf property-list :stereochemistry-type :undefined-center)))
+                        (constitution-atom (make-instance 'constitution-atom
+                                                          :atom-name (name node)
+                                                          :element (element node)
+                                                          :index (constitution-atom-index node)
+                                                          :properties property-list)))
                    (setf (aref constitution-atoms (constitution-atom-index node))
-                         (make-instance 'constitution-atom
-                                        :atom-name (name node)
-                                        :element (element node)
-                                        :index (constitution-atom-index node)
-                                        :properties property-list
-                                        :stereochemistry-type stereochemistry-type)))))
+                         constitution-atom))))
              (nodes graph))
     (loop for edge in (edges graph)
           for from-node = (from-node edge)
@@ -329,28 +350,42 @@ So if name is \"ALA\" and stereoisomer-index is 1 the name becomes ALA{CA/S}."
                  (declare (ignore key))
                  (setf (atom-names plug) (subseq (atom-names plug) 0 (position nil (atom-names plug)))))
                plugs)
-      (let* ((stereocenters (loop for index below (length constitution-atoms)
-                                  for ca = (elt constitution-atoms index)
-                                  for prop-list = (properties ca)
-                                  for stereochemistry-type = (stereochemistry-type ca)
-                                  when (or (eq :chiral stereochemistry-type)
-                                           (eq :prochiral-left stereochemistry-type)
-                                           (eq :prochiral-right stereochemistry-type)
-                                           (eq :undefined-center stereochemistry-type)
-                                           (error "Uknown stereochemistry-type ~a - must be :chiral, :prochiral-left, :prochiral-right" stereochemistry-type))
-                                    collect (make-instance 'stereocenter-info
-                                                           :name ca
-                                                           :type stereochemistry-type))))
-        (multiple-value-bind (stereo-information prochiral-centers)
-            (build-stereo-information (name graph) stereocenters)
-          (values constitution-atoms plugs stereo-information prochiral-centers))))))
+      (let* ((stereocenter-info (loop with result = nil
+                                      for index below (length constitution-atoms)
+                                      for constitution-atom = (elt constitution-atoms index)
+                                      for prop-list = (properties constitution-atom)
+                                      for stereochemistry-type = (getf prop-list :stereochemistry-type)
+                                      for plug-names = (getf prop-list :plugs)
+                                      for number-of-bonds = (+ (length (bonds constitution-atom)) (length plug-names))
+                                      for ca-element = (element constitution-atom)
+;;                                      do (format t "zxhc ~a~%" constitution-atom)
+                                      do (cond
+                                           ((and (eq ca-element :c) (= 4 number-of-bonds) stereochemistry-type)
+                                            (unless (member stereochemistry-type
+                                                            '(:both :s :r :left-handed :right-handed :undefined-center))
+                                              (error "Uknown stereochemistry-type ~a - must be :both, :S, :R, :left-handed, :right-handed" stereochemistry-type))
+                                            (unless (eq stereochemistry-type :undefined-center)
+                                              (push (make-instance 'stereocenter-info
+                                                                   :constitution-atom constitution-atom
+                                                                   :type stereochemistry-type) result)))
+                                           ((and (eq ca-element :c) (= 4 number-of-bonds))
+                                            ;; prochiral atoms are always :left-handed
+                                              (push (make-instance 'stereocenter-info
+                                                                   :constitution-atom constitution-atom
+                                                                   :type :left-handed) result))
+                                           (stereochemistry-type
+                                            (error "Do not specify stereochemistry-type ~s for ~a" stereochemistry-type constitution-atom))
+                                           )
+                                      finally (return result))))
+        #+(or)(format t "stereocenter-info = ~s~%" stereocenter-info)
+        ;; build stereochemistry here
+        (let ((stereo-information (build-stereo-information (name graph) stereocenter-info)))
+          (values constitution-atoms plugs stereo-information))))))
 
 
 (defun constitution-from-graph (graph)
-  (multiple-value-bind (constitution-atoms plugs stereo-information prochiral-info)
+  (multiple-value-bind (constitution-atoms plugs stereo-information)
       (constitution-atoms-from-graph graph)
-    (when prochiral-info
-      (error "Handle prochiral-info ~a" prochiral-info))
     (make-instance 'constitution
                    :name (name graph)
                    :constitution-atoms constitution-atoms
