@@ -9,6 +9,8 @@
   (:use #:common-lisp)
   (:nicknames #:ts)
   (:export
+   #:make-topology-from-residue
+   #:topologyp
    #:degree-difference
    #:constitution-atom-index
    #:atom-name
@@ -19,13 +21,21 @@
    #:order
    #:children
    #:name
-   #:atom-names
+   #:plug-bonds
+   #:atom-name
+   #:bond-order
+   #:plug-bond
    #:root-node
    #:constitution-from-graph
    #:stereo-information
+   #:stereoisomer
+   #:make-in-plug
+   #:make-out-plug
+   #:add-plug
    #:plugs
    #:name
    #:configurations
+   #:make-constitution-atoms-from-residue
    #:topology-list
    #:property-list
    #:topology
@@ -37,6 +47,13 @@
    #:constitution
    #:constitution-atoms
    #:stereoisomer-name
+   #:stereoisomer-atoms
+   #:build-residue-single-name
+   #:connect-residues
+   #:is-in-plug-name
+   #:other-plug-name
+   #:find-in-plug
+   #:atom-type
    #:joint-template
    #:bonded-joint-template
    #:in-plug-bonded-joint-template
@@ -99,7 +116,7 @@
    #:define-cap
    #:build-molecule
    #:oligomer-space
-   #:oligomer
+   #:oligomers
    #:monomer
    #:directional-coupling
    #:out-plug-name
@@ -177,7 +194,11 @@
    #:properties
    #:degrees-add
    #:probability
-   #:oligomer-force-field-name))
+   #:oligomer-force-field-name
+   #:oligomer
+   #:build-residue-for-isomer
+   #:stereoisomer-atom
+   #:atom-charge))
 
 (defpackage #:monomer-context
   (:use #:common-lisp)
@@ -188,55 +209,6 @@
    #:match
    #:match-iterator
    ))
-
-(defpackage #:foldamer
-  (:use #:common-lisp)
-  (:nicknames #:fd)
-  (:export
-   #:define-foldamer
-   #:parse
-   #:oligomer-space
-   #:unused-trainer-contexts
-   #:maybe-remove-unused-trainers
-   #:generate-training-oligomers
-   #:training-oligomer-space
-   #:oligomer-space
-   #:focus-monomer
-   #:monomer-context-matcher
-   #:find-oligomer-for-monomer-context
-   #:oligomer-monomer-context-iterator
-   #:build-trainer
-   #:prepare-to-build-trainer
-   #:foldamer-monomer-context
-   #:calculate-files
-   #:verify-foldamer-describes-oligomer-space
-   #:valid-trainer-contexts
-   #:extract-fragment-conformations-map
-
-   #:foldamer-setup
-   #:foldamer-status
-   #:foldamer-extract-conformations
-   #:foldamer-run-node
-
-   #:trainer-context
-   #:trainer-job
-   #:node-index
-   #:optimize-fragment-conformations-map
-   #:foldamer-describe-missing-fragment-matches
-   #:monomer-contents-vector
-   #:foldamer-describe-missing-match
-   #:monomer-context
-   #:monomer-context-to-oligomer-map
-   #:topologys
-
-   #:verify-all-training-molecules-can-be-parameterized
-   #:load-force-field
-   #:load-foldamer-conformations-map
-   #:save-foldamer-conformations-map
-   #:load-foldamer
-   #:save-foldamer
-   #:all-matching-monomer-contexts))
-
 
 (defpackage #:topology.graphviz
   (:use #:common-lisp)

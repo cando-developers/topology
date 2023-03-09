@@ -4,11 +4,10 @@
   ((atom-name :initarg :atom-name :accessor atom-name)
    (index :initarg :index :accessor index)
    (element :initarg :element :accessor element)
-   (atom-type :initarg :atom-type :accessor atom-type)
    (properties :initform nil :initarg :properties :accessor properties)
    (bonds :initform nil :initarg :bonds :accessor bonds)))
 
-(cando:make-class-save-load constitution-atom
+(cando.serialize:make-class-save-load constitution-atom
                             :print-unreadably
                             (lambda (obj stream)
                               (print-unreadable-object (obj stream :type t)
@@ -19,18 +18,42 @@
    (order :initarg :order :accessor order)))
 
 
-(cando:make-class-save-load constitution-bond)
+(cando.serialize:make-class-save-load constitution-bond)
 
 (defclass constitution-atoms ()
   ((atoms :initarg :atoms :accessor atoms)))
 
-(cando:make-class-save-load constitution-atoms)
+(cando.serialize:make-class-save-load constitution-atoms)
+
+(defclass constitution ()
+  ((name :initarg :name :accessor name)
+   (constitution-atoms :initarg :constitution-atoms :accessor constitution-atoms)))
+
+(cando.serialize:make-class-save-load constitution)
+
+(defclass stereoisomer-atom ()
+  ((atom-name :initarg :atom-name :accessor atom-name)
+   (constitution-atom-index :initarg :constitution-atom-index :accessor constitution-atom-index)
+   (atom-charge :initarg :atom-charge :accessor atom-charge)
+   (atom-type :initarg :atom-type :accessor atom-type)))
+
+(cando.serialize:make-class-save-load
+ stereoisomer-atom
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~s ~a" (atom-name obj) (constitution-atom-index obj)))))
+
+(defclass stereoisomer-virtual-atom (stereoisomer-atom)
+  ())
+
 
 (defclass stereoconfiguration ()
   ((atom-name :initarg :atom-name :accessor atom-name)
-   (configuration :initarg :configuration :accessor configuration)))
+   (configuration :initarg :configuration :accessor configuration)
+   (stereochemistry-type :initarg :stereochemistry-type :accessor stereochemistry-type)))
 
-(cando:make-class-save-load stereoconfiguration
+(cando.serialize:make-class-save-load stereoconfiguration
                             :print-unreadably
                             (lambda (obj stream)
                               (print-unreadable-object (obj stream :type t)
@@ -39,35 +62,16 @@
 (defclass stereoisomer ()
   ((name :initarg :name :accessor name)
    (pdb :initarg :pdb :accessor pdb)
-   (stereoisomer-index :initarg :stereoisomer-index :accessor stereoisomer-index)
-   (configurations :initarg :configurations :accessor configurations)))
+   (stereoisomer-atoms :initarg :stereoisomer-atoms :accessor stereoisomer-atoms)
+   (stereoconfigurations :initarg :stereoconfigurations :accessor stereoconfigurations)
+   (complex-restraints :initform nil :initarg :complex-restraints :accessor complex-restraints)))
 
-(cando:make-class-save-load stereoisomer
-                            :print-unreadably
-                            (lambda (obj stream)
-                              (print-unreadable-object (obj stream :type t)
-                                (format stream "~a ~s" (name obj) (configurations obj)))))
-
-(defclass constitution ()
-  ((name :initarg :name :accessor name)
-   (constitution-atoms :initarg :constitution-atoms :accessor constitution-atoms)
-   (plugs :type hash-table :initarg :plugs :accessor plugs)
-   (topology-list :initform nil :initarg :topology-list :accessor topology-list)
-   (stereo-information :initarg :stereo-information :accessor stereo-information)))
-
-(cando:make-class-save-load constitution)
-
-(defclass stereoisomer-atom ()
-  ((atom-name :initarg :atom-name :accessor atom-name)
-   (constitution-atom-index :initarg :constitution-atom-index :accessor constitution-atom-index)
-   (atom-charge :initarg :atom-charge :accessor atom-charge)
-   (atom-type :initarg :atom-type :accessor atom-type)))
-
-(cando:make-class-save-load stereoisomer-atom)
-
-(defclass stereoisomer-virtual-atom (stereoisomer-atom)
-  ())
-
+(cando.serialize:make-class-save-load
+ stereoisomer
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a ~s" (name obj) (stereoconfigurations obj)))))
 
 (defclass restraint ()
   ())
@@ -83,7 +87,7 @@
                          :accessor dihedral-max-degrees)
    (weight :initarg :weight :accessor weight)))
 
-(cando:make-class-save-load dihedral-restraint
+(cando.serialize:make-class-save-load dihedral-restraint
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -99,20 +103,30 @@
 (defclass topology ()
   ((name :initarg :name :accessor name)
    (constitution :initarg :constitution :accessor constitution)
+   (stereoisomer :initarg :stereoisomer :accessor stereoisomer)
    (property-list :initform nil :initarg :property-list :accessor property-list)
-   (plugs :type hash-table :initarg :plugs :accessor plugs)
+   (plugs :initform (make-hash-table) :type hash-table :initarg :plugs :accessor plugs)
    (joint-template :initarg :joint-template :accessor joint-template)
    (restraints :initform nil :initarg :restraints :accessor restraints)
-   (stereoisomer-atoms :initform (make-array 4 :adjustable t :fill-pointer 0)
-                       :initarg :stereoisomer-atoms :accessor stereoisomer-atoms)
    ))
 
 
-(cando:make-class-save-load topology
+(defgeneric add-plug (topology plug-name plug))
+
+(defmethod add-plug ((topology topology) plug-name plug)
+  (setf (gethash plug-name (plugs topology)) plug))
+
+(defgeneric topologyp (obj)
+  (:documentation "Return T if the object is a topology"))
+
+(defmethod topologyp ((obj t)) nil)
+(defmethod topologyp ((obj topology)) t)
+
+(cando.serialize:make-class-save-load topology
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
-     (format stream "~a" (name obj)))))
+     (format stream "~s" (name obj)))))
 
 (defun has-plug-named (topology plug-name)
   (gethash plug-name (plugs topology)))
@@ -156,28 +170,83 @@
              (plugs topology))
     plugs))
 
-(defclass plug ()
-  ((name :initarg :name :accessor name)
-   (atom-names :initform (make-array 16)
-               :initarg :atom-names
-               :accessor atom-names)))
+(defclass plug-bond ()
+  ((atom-name :initarg :atom-name :accessor atom-name)
+   (bond-order :initarg :bond-order :accessor bond-order)))
 
-(cando:make-class-save-load plug
+(cando.serialize:make-class-save-load
+ plug-bond
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
-     (format stream "~a ~a" (name obj) (atom-names obj)))))
+     (format stream "~a" (atom-name obj)))))
+
+(defclass plug ()
+  ((name :initarg :name :accessor name)
+   (plug-bonds :initform (make-array 2) :initarg :plug-bonds :accessor plug-bonds)))
+
+(cando.serialize:make-class-save-load plug
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a ~a" (name obj) (plug-bonds obj)))))
 
 (defclass in-plug (plug)
   ())
 
-(cando:make-class-save-load in-plug)
+(cando.serialize:make-class-save-load
+ in-plug
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a ~a" (name obj) (plug-bonds obj)))))
+
+(defun make-in-plug (name bond0 bond-order0 &optional bond1 bond-order1)
+  (make-instance 'in-plug
+                 :name name
+                 :plug-bonds (if bond1
+                                 (vector (make-instance 'plug-bond
+                                                        :atom-name bond0
+                                                        :bond-order bond-order0)
+                                         (make-instance 'plug-bond
+                                                        :atom-name bond1
+                                                        :bond-order bond-order1))
+                                 (vector (make-instance 'plug-bond
+                                                        :atom-name bond0
+                                                        :bond-order bond-order0)))))
 
 (defclass out-plug (plug)
   ())
 
-(cando:make-class-save-load out-plug)
+(cando.serialize:make-class-save-load
+ out-plug
+ :print-unreadably
+ (lambda (obj stream)
+   (print-unreadable-object (obj stream :type t)
+     (format stream "~a ~a" (name obj) (plug-bonds obj)))))
 
+(defun make-out-plug (name bond0 bond-order0 &optional bond1 bond-order1)
+  (make-instance 'out-plug
+                 :name name
+                 :plug-bonds (if bond1
+                                 (vector (make-instance 'plug-bond
+                                                        :atom-name bond0
+                                                        :bond-order bond-order0)
+                                         (make-instance 'plug-bond
+                                                        :atom-name bond1
+                                                        :bond-order bond-order1))
+                                 (vector (make-instance 'plug-bond
+                                                        :atom-name bond0
+                                                        :bond-order bond-order0)))))
+
+(defun is-in-plug-name (name)
+  (let ((first-char (elt (string name) 0)))
+    (char= first-char #\-)))
+
+(defun other-plug-name (name)
+  (if (is-in-plug-name name)
+      (intern (format nil "~c~a" #\+ (subseq (string name) 1)) :keyword)
+      (intern (format nil "~c~a" #\- (subseq (string name) 1)) :keyword)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -195,7 +264,7 @@
               :accessor couplings)
    (monomers :initarg :monomers :accessor monomers)))
 
-(cando:make-class-save-load monomer
+(cando.serialize:make-class-save-load monomer
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -257,7 +326,7 @@
    (source-monomer :initarg :source-monomer :accessor source-monomer)
    (target-monomer :initarg :target-monomer :accessor target-monomer)))
 
-(cando:make-class-save-load directional-coupling
+(cando.serialize:make-class-save-load directional-coupling
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -304,7 +373,7 @@
                         :initarg :number-of-sequences
                         :accessor %number-of-sequences)))
 
-(cando:make-class-save-load oligomer-space
+(cando.serialize:make-class-save-load oligomer-space
   :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t))))
@@ -362,7 +431,7 @@ Examples:
   ((monomer-indices :initarg :monomer-indices :accessor monomer-indices)
    (oligomer-space :initarg :oligomer-space :accessor oligomer-space)))
 
-(cando:make-class-save-load oligomer)
+(cando.serialize:make-class-save-load oligomer)
 
 (defun goto-sequence (oligomer index)
   (let* ((bases (loop for monomer across (monomers (oligomer-space oligomer))
@@ -434,8 +503,6 @@ Examples:
                                              (elt (monomer-indices oligomer) target-monomer-index))))
               (setf remaining-couplings (cdr remaining-couplings))
               (values coupling source-monomer-name target-monomer-name))))))))
-  
-
 
 (defun formula-for-topology (topology)
   (let* ((ht (make-hash-table))
@@ -445,3 +512,180 @@ Examples:
           for element = (element const-atom)
           do (incf (gethash element ht 0)))
     (alexandria:hash-table-alist ht)))
+
+(defun make-topology-from-residue (residue topology-name constitution)
+  (let ((stereoisomer-name topology-name))
+    (unless constitution
+      (error "The constitution must be defined"))
+    (let ((ca (topology:constitution-atoms constitution))
+          (topology (make-instance 'topology:topology
+                                   :name topology-name
+                                   :constitution constitution))
+          (stereoisomer-atoms (make-array (chem:content-size residue)))
+          (stereoconfigurations nil))
+      (chem:do-atoms (atm residue)
+        (let* ((constitution-index (loop for idx below (length (constitution-atoms constitution))
+                                         for constitution-atom = (elt (constitution-atoms constitution) idx)
+                                         when (eq (atom-name constitution-atom) (chem:get-name atm))
+                                           do (return idx)))
+               (sai (make-instance 'topology:stereoisomer-atom
+                                   :atom-name (chem:get-name atm)
+                                   :atom-type (chem:atom-type atm)
+                                   :atom-charge (chem:get-charge atm)
+                                   :constitution-atom-index constitution-index)))
+          (setf (elt stereoisomer-atoms constitution-index) sai)
+          #+(or)(format t "make-topology-from-residue atm ~s configuration ~s stereochemistry-type ~s~%"
+                  atm
+                  (chem:get-configuration atm)
+                  (chem:get-stereochemistry-type atm))
+
+          ))
+      (let* ((stereoisomer (make-instance 'stereoisomer
+                                          :name (chem:get-name residue)
+                                          :pdb (chem:get-pdb-name residue)
+                                          :stereoisomer-atoms stereoisomer-atoms
+                                          :stereoconfigurations stereoconfigurations)))
+        (setf (stereoisomer topology) stereoisomer)
+        (values topology constitution)))))
+
+
+(defun build-residue-for-topology (topology)
+  (let* ((stereoisomer (stereoisomer topology))
+         (residue-name (name stereoisomer))
+         (residue (chem:make-residue residue-name))
+         #|         
+         CL_DEFMETHOD Residue_sp Topology_O::buildResidueForIsomer(size_t isomer) const ; ; ;
+         {                              ; ; ;
+         //  core::write_bf_stream(fmt::sprintf("%s:%d Topology_O::buildResidueForIsomer\n" , __FILE__ , __LINE__ )); ; ; ;
+         StereoisomerAtoms_sp info = this->_StereoisomerAtomProperties[isomer]; ; ; ;
+         //  printf("%s:%d buildResidueForIsomer isomer = %lu  stereoisomerAtoms = %s\n", __FILE__, __LINE__, isomer, _rep_(info).c_str()); ; ; ;
+         LOG("creating residue\n");     ; ; ;
+         core::Symbol_sp residueName = info->getName(); ; ; ;
+         if (residueName.unboundp()) {  ; ; ;
+         SIMPLE_ERROR(("residueName for %s was unbound") , _rep_(info)); ; ; ;
+         }                              ; ; ;
+         Residue_sp res = Residue_O::make(residueName); ; ; ;
+         |#
+         (constitution-atoms (constitution-atoms (constitution topology)))
+         (num-atoms (length constitution-atoms))
+         (atoms (make-array num-atoms)))
+    ;; Create the atoms
+    (chem:resize-contents residue num-atoms)
+    (loop for idx below num-atoms
+          for ca = (elt constitution-atoms idx)
+          for sia = (elt (stereoisomer-atoms stereoisomer) idx)
+          for atm = (chem:make-atom (atom-name ca) (element ca))
+          do (chem:set-atom-type atm (atom-type sia))
+          do (chem:set-charge atm (atom-charge sia))
+          do (chem:set-properties atm (copy-seq (properties ca)))
+          do (chem:set-content-at residue idx atm)
+          )
+    #|
+    ConstitutionAtoms_sp constitutionAtoms = this->_Constitution->getConstitutionAtoms(); ; ; ;
+    size_t numAtoms = constitutionAtoms->numberOfAtoms(); ; ; ;
+    gctools::Vec0<Atom_sp> atoms;       ; ; ;
+    atoms.resize(numAtoms);             ; ; ;
+    res->resizeContents(numAtoms);      ; ; ;
+    size_t idx = 0;                     ; ; ;
+    for ( size_t idx=0, idxEnd(numAtoms); idx<idxEnd; ++idx ) { ; ; ;
+    StereoisomerAtom_sp ai = (*info)[idx]; ; ; ;
+    Atom_sp atom = Atom_O::create();    ; ; ;
+    ConstitutionAtom_sp ca = (*constitutionAtoms)[ai->constitutionAtomIndex()]; ; ; ;
+    atom->setName(ca->_AtomName);       ; ; ;
+    atom->setElement(ca->_Element);     ; ; ;
+    atom->setType(ai->_AtomType);       ; ; ;
+    atom->setCharge(ai->_AtomCharge);   ; ; ;
+    atom->setProperties(cl__copy_seq(ca->_Properties)); ; ; ;
+    atom->turnOnFlags(needsBuild);      ; ; ;
+    //    printf("%s:%d  Creating atom@%d -> %s\n", __FILE__, __LINE__, ai->_ConstitutionAtomIndex, _rep_(atom).c_str()); ; ; ;
+    atoms[ai->_ConstitutionAtomIndex] = atom; ; ; ;
+    if (ai->_ConstitutionAtomIndex != idx) { ; ; ;
+    SIMPLE_ERROR(("The atom %s _ConstitutionAtomIndex %lu does not match the StereoisomerAtoms idx %lu") , _rep_(atom) , ai->_ConstitutionAtomIndex , idx ); ; ; ;
+    }                                   ; ; ;
+    res->putMatter(idx,atom); // order atoms as in Topology ; ; ;
+    }                                   ; ; ;
+    |#
+
+    ;; Create the bonds
+    (loop for idx below num-atoms
+          for from-atm = (chem:content-at residue idx)
+          for ca = (elt (constitution-atoms (constitution topology)) idx)
+          do (loop for constitution-bond in (bonds ca)
+                   for to-atm = (chem:content-at residue (to-atom-index constitution-bond))
+                   when (not (chem:is-bonded-to from-atm to-atm))
+                     do (let ((order (order constitution-bond)))
+                          (chem:bond-to from-atm to-atm order))))
+    #|
+    for ( size_t i=0, iEnd(constitutionAtoms->numberOfAtoms()); i<iEnd; ++i ) { ; ; ;
+    Atom_sp fromAtom = atoms[i];        ; ; ;
+    ConstitutionAtom_sp ca = (*constitutionAtoms)[i]; ; ; ;
+    //    printf("%s:%d @%zu fromAtom -> %s\n", __FILE__, __LINE__, i, _rep_(fromAtom).c_str()); ; ; ;
+    for ( auto bi=ca->_Bonds.begin(); bi!=ca->_Bonds.end(); ++bi ) ; ; ;
+    {                                   ; ; ;
+    if ((*bi)->_ToAtomIndex>=atoms.size()) { ; ; ;
+    SIMPLE_ERROR(("Atom index %d out of bounds (num-atoms %d)") , (*bi)->_ToAtomIndex , atoms.size()); ; ; ;
+    }                                   ; ; ;
+    Atom_sp toAtom = atoms[(*bi)->_ToAtomIndex]; ; ; ;
+    //      printf("%s:%d     @%d toAtom -> %s\n", __FILE__, __LINE__, (*bi)->_ToAtomIndex, _rep_(toAtom).c_str()); ; ; ;
+    if ( !fromAtom->isBondedTo(toAtom) ) { ; ; ;
+    BondOrder order = (*bi)->_BondOrder; ; ; ;
+    Atom_sp tempFromAtom = fromAtom;    ; ; ;
+    Atom_sp tempToAtom = toAtom;        ; ; ;
+    Bond_O::canonicalizeBondOrder(tempFromAtom,tempToAtom,order); ; ; ;
+    tempFromAtom->bondTo(tempToAtom,order); ; ; ;
+    }                                   ; ; ;
+    }                                   ; ; ;
+    }                                   ; ; ;
+    |#
+    ;; Now add stereochemical restraints
+    (let ((stereoconfigurations (stereoconfigurations stereoisomer)))
+      (loop for configuration in stereoconfigurations
+            for name = (atom-name configuration)
+            for residue-atom = (chem:atom-with-name residue name)
+            do (chem:set-stereochemistry-type residue-atom (stereochemistry-type configuration))
+            do (chem:set-configuration residue-atom (configuration configuration))))
+    #|
+    // Now add stereochemical restraints ; ; ;
+                                        ; ; ;
+    //                                  ; ; ;
+    // Set chiral restraints            ; ; ;
+    //                                  ; ; ;
+    Stereoisomer_sp si = this->_Constitution->getStereoisomerWithName(residueName); ; ; ;
+    gctools::Vec0<StereoConfiguration_sp>::iterator	sci; ; ; ;
+    for (sci=si->_Configurations_begin();sci!=si->_Configurations_end();sci++){ ; ; ;
+    core::T_sp name = (*sci)->getAtomName(); ; ; ;
+    core::T_mv aa_mv = res->atomWithName(name); ; ; ;
+    Atom_sp aa = gc::As<Atom_sp>(aa_mv); ; ; ;
+    LOG("Setting the configuration of atom(%s) to(%s)" , aa->description().c_str() , _rep_((*sci)->getConfiguration())  ); // ; ; ;
+    auto trans = translate::from_object<ConfigurationEnum,std::true_type>((*sci)->getConfiguration())._v; ; ; ;
+    aa->setStereochemistryType(chiralCenter); ; ; ;
+    aa->setConfiguration(trans);        ; ; ;
+    }                                   ; ; ;
+    |#
+    ;; Now add dihedral restraints for E/Z pi bonds
+    (let ((molecule (chem:make-molecule)))
+      (chem:add-matter molecule residue)
+      (let ((cip-priorities (chem:assign-priorities-hash-table molecule)))
+        (loop for complex-restraint in (complex-restraints stereoisomer)
+              do (chem:fill-restraints complex-restraint residue cip-priorities))))
+    residue)
+)
+
+(defun build-residue-single-name (topology)
+  (let ((residue (build-residue-for-topology topology)))
+    residue))
+
+;;;
+;;; Functions used by C++ code for assigning types
+;;;
+(defun chem:stereoisomer-atoms (topology)
+  (let* ((stereoisomer (stereoisomer topology))
+         (stereoisomer-atoms (stereoisomer-atoms stereoisomer)))
+    stereoisomer-atoms))
+
+(defun chem:stereoisomer-atom-with-name (stereoisomer-atoms name)
+  (find name stereoisomer-atoms :key #'atom-name))
+
+(defun chem:stereoisomer-atom-type (stereoisomer-atom)
+  (atom-type stereoisomer-atom))
+

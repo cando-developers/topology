@@ -7,14 +7,23 @@
   (let* ((residue (chem:make-residue monomer-name))
          (constitution (topology:constitution topology))
          (constitution-atoms (topology:constitution-atoms constitution))
+         (stereoisomer-atoms (topology:stereoisomer-atoms (topology:stereoisomer topology)))
          (atoms (make-array (length constitution-atoms)))
          (named-atoms (make-hash-table)))
     ;; Add atoms to the residue
     (loop for index below (length constitution-atoms)
           for constitution-atom = (elt constitution-atoms index)
+          for stereoisomer-atom = (elt stereoisomer-atoms index)
           for atm-name = (topology:atom-name constitution-atom)
           for atm-element = (topology:element constitution-atom)
           for atm = (chem:make-atom atm-name atm-element)
+          for atm-type = (when (slot-boundp stereoisomer-atom 'topology:atom-type)
+                           (topology:atom-type stereoisomer-atom))
+          for atm-charge = (if (slot-boundp stereoisomer-atom 'topology:atom-charge)
+                               (topology:atom-charge stereoisomer-atom)
+                               0.0)
+          do (chem:atom/set-atom-type atm atm-type)
+          do (chem:atom/set-charge atm atm-charge)
           do (chem:add-matter residue atm)
           do (setf (elt atoms index) atm
                    (gethash atm-name named-atoms) atm))
@@ -29,8 +38,14 @@
                    when (< atm1-index atm2-index)
                      do (chem:bond-to atm1 atm2 (topology:order bond))))
     ;; Define the :chiral atoms
-    (loop for index below (length (stereoisomer-atoms topology))
-          for stereoisomer-atom = (elt (stereoisomer-atoms topology) index)
+    (loop for stereoisomer = (let ((si (stereoisomer topology)))
+                               (unless si
+                                 (break "Check topology ~a" topology))
+                               si)
+          for _1 = (format t "topology ~s  stereoisomer ~s~%" topology stereoisomer)
+          for stereoisomer-atoms = (stereoisomer-atoms stereoisomer)
+          for index below (length stereoisomer-atoms)
+          for stereoisomer-atom = (elt stereoisomer-atoms index)
           for atom-name = (atom-name stereoisomer-atom)
           for atm = (gethash atom-name named-atoms)
           for stereochemistry-type = :chiral
@@ -38,7 +53,7 @@
           do (chem:set-stereochemistry-type atm stereochemistry-type)
           do (chem:set-configuration atm (configuration stereoisomer-atom)))
     ;; assign stereochem for prochiral atoms so they aren't random
-    (cando:do-atoms (atm residue)
+    (chem:do-atoms (atm residue)
       (when (= (chem:number-of-bonds atm) 4)
         (chem:set-hybridization atm :sp3)
         (when (not (eq (chem:get-stereochemistry-type atm) :chiral))
@@ -67,6 +82,7 @@
     (chem:add-matter mol residue)
     mol))
 
+#+(or)
 (defun sketch-svg (topology &rest args)
   "Generate an svg sketch of the topology - send args to sketch2d"
   (let ((mol (build-one-molecule-for-topology topology)))
@@ -189,13 +205,12 @@
 (defgeneric oligomer-force-field-name (foldamer)
   (:documentation "Return the name of the force field used by the foldamer"))
 
-(defun build-molecule (oligomer)
+(defun build-molecule (oligomer aggregate monomer-positions)
   (let ((root-monomer (root-monomer oligomer))
         (monomer-out-couplings (make-hash-table))
         (monomers-to-residues (make-hash-table))
         (monomers-to-topologys (make-hash-table))
-        (ring-couplings nil)
-        (monomer-positions (make-hash-table)))
+        (ring-couplings nil))
     (loop for index below (length (couplings oligomer))
           for coupling = (elt (couplings oligomer) index)
           if (typep coupling 'directional-coupling)
@@ -257,9 +272,8 @@
                                     topology2
                                     residue2
                                     plug2name))
-      (let ((agg (chem:make-aggregate :agg)))
-        (chem:add-matter agg molecule)
-        (values agg molecule monomer-positions)))))
+      (chem:add-matter aggregate molecule)
+      molecule)))
 
 
 (defun build-all-molecules (oligomer &optional (number-of-sequences (number-of-sequences oligomer)))
@@ -269,8 +283,7 @@ than the (chem:oligomer/number-of-sequences oligomer)."
   (loop for index from 0 below number-of-sequences
         for aggregate = (chem:make-aggregate (intern (format nil "seq-~a" index) :keyword))
         for molecule = (progn
-                         (chem:oligomer/goto-sequence oligomer index)
+                         (topology:goto-sequence oligomer index)
                          (build-molecule oligomer))
         do (chem:add-matter aggregate molecule)
-           (cando:jostle aggregate)
         collect aggregate))

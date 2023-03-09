@@ -11,15 +11,16 @@
                          in-plug-name)
   (let* ((out-plug (topology:plug-named prev-topology out-plug-name))
          (in-plug (topology:plug-named next-topology in-plug-name)))
-    (loop for bond-index below (length (topology:atom-names out-plug))
-          do (let* ((out-plug-atom-name (elt (topology:atom-names out-plug) bond-index))
-                    (in-plug-atom-name (elt (topology:atom-names in-plug) bond-index))
-                    (out-atom (chem:atom-with-name prev-residue out-plug-atom-name t))
-                    (in-atom (chem:atom-with-name next-residue in-plug-atom-name t))
-                    (bo-in0 :single-bond)
-                    (bo-out0 :single-bond))
-               (declare (ignore bo-out0))
-               (chem:bond-to in-atom out-atom bo-in0)))))
+    (unless (= (length (topology:plug-bonds out-plug)) (length (topology:plug-bonds in-plug)))
+      (error "There is a mismatch between the number of plug-bonds in ~s and ~s" out-plug in-plug))
+    (loop for bond-index below (length (topology:plug-bonds out-plug))
+          for out-plug-bond = (elt (topology:plug-bonds out-plug) bond-index)
+          for in-plug-bond = (elt (topology:plug-bonds in-plug) bond-index)
+          for out-plug-atom-name = (topology:atom-name out-plug-bond)
+          for in-plug-atom-name = (topology:atom-name in-plug-bond)
+          for out-atom = (chem:atom-with-name prev-residue out-plug-atom-name t)
+          for in-atom = (chem:atom-with-name next-residue in-plug-atom-name t)
+          do (chem:bond-to in-atom out-atom :single-bond))))
 
 (defun out-plug-name-p (name)
   (when (and name (symbolp name))
@@ -158,17 +159,17 @@
   (design.load:setup design))
 |#
 
-(cando:make-class-save-load foldamer)
+(cando.serialize:make-class-save-load foldamer)
 
 (defun save-foldamer (foldamer file-name)
   (let ((pn (pathname file-name)))
     (ensure-directories-exist pn)
-    (cando:save-cando foldamer file-name)))
+    (cando.serialize:save-cando foldamer file-name)))
 
 (defun load-foldamer (file-name)
-  (let ((foldamer (cando:load-cando file-name)))
+  (let ((foldamer (cando.serialize:load-cando file-name)))
     (loop for topology in (topologys foldamer)
-          do (cando:register-topology topology))
+          do (chem:register-topology topology))
     foldamer))
 
 (defun lookup-maybe-part (name parts)
@@ -242,8 +243,8 @@ This is for looking up parts but if the thing returned is not a part then return
 (defun do-coupling (oligomer coupling-name ring-info previous-parts next-parts)
   (unless next-parts
     (error "There are no next parts to add to ~a" previous-parts))
-  (let ((in-plug-name (chem:in-plug-name coupling-name))
-        (out-plug-name (chem:out-plug-name coupling-name)))
+  (let ((in-plug-name (in-plug-name coupling-name))
+        (out-plug-name (out-plug-name coupling-name)))
     (let ((previous-monomer (parts-with-plugs previous-parts out-plug-name))
           (next-monomer (parts-with-plugs next-parts in-plug-name)))
       (when (= (length previous-monomer) 0)
@@ -262,11 +263,11 @@ This is for looking up parts but if the thing returned is not a part then return
                   (first next-monomer))
           (let ((plug1name (or (first ring-info) out-plug-name))
                 (plug2name (or (second ring-info) in-plug-name)))
-            (chem:ring-couple-with-plug-names oligomer
-                                              (first previous-monomer)
-                                              plug1name
-                                              (first next-monomer)
-                                              plug2name))))))
+            (ring-couple-with-plug-names oligomer
+                                         (first previous-monomer)
+                                         plug1name
+                                         (first next-monomer)
+                                         plug2name))))))
 
 (defun interpret-subtree (oligomer subtree labels &key (parts *parts*))
   (let* ((root-monomer-info (pop subtree))
@@ -337,7 +338,7 @@ of out-plugs."
     (format *debug-io* "out-plug-names -> ~s~%" out-plug-names)
     (case (length out-plug-names)
       (0
-       (error "There are no out-plugs in ~s that match the in-plug-name ~s - existing plugs: ~s" other-monomer in-plug-name (chem:topology/plugs-as-list topology)))
+       (error "There are no out-plugs in ~s that match the in-plug-name ~s - existing plugs: ~s" other-monomer in-plug-name (plugs-as-list topology)))
       (1
        (return-from ensure-one-unique-out-plug-name (first out-plug-names)))
       (otherwise

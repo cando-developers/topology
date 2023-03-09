@@ -1,79 +1,41 @@
 (in-package :topology)
 
-(defclass constitution-atom ()
-  ((atom-name :initarg :atom-name :accessor atom-name)
-   (index :initarg :index :accessor index)
-   (element :initarg :element :accessor element)
-   (atom-type :initarg :atom-type :accessor atom-type)
-   (properties :initform nil :initarg :properties :accessor properties)
-   (bonds :initform nil :initarg :bonds :accessor bonds)))
 
-(defmethod print-object ((obj constitution-atom) stream)
-  (print-unreadable-object (obj stream :type t)
-    (format stream "~a" (atom-name obj))))
+(defun make-constitution-atom-from-atom (atom constitution-atom-index)
+  (make-instance 'constitution-atom
+                 :atom-name (chem:atom-name atom)
+                 :element (chem:get-element atom)
+                 :properties (chem:matter/properties atom)
+                 :index constitution-atom-index))
 
-(defclass constitution-bond ()
-  ((to-atom-index :initarg :to-atom-index :accessor to-atom-index)
-   (order :initarg :order :accessor order)))
+(defun define-constitution-atom-bonding (constitution-atom atm atom-to-index-map)
+  (let ((constitution-bonds (loop for bond-index below (chem:number-of-bonds atm)
+                                  for other-atom = (chem:atom/bonded-neighbor atm bond-index)
+                                  for order = (chem:atom/bonded-order atm bond-index)
+                                  for other-atom-index = (gethash other-atom atom-to-index-map)
+                                  when other-atom-index
+                                  collect (make-instance 'constitution-bond
+                                                         :to-atom-index other-atom-index
+                                                         :order order))))
+    (setf (bonds constitution-atom) constitution-bonds)))
 
-(defmethod print-object ((obj constitution-bond) stream)
-  (print-unreadable-object (obj stream :type t)
-    (format stream "~a" (to-atom-index obj))))
-
-(defclass constitution-atoms ()
-  ((atoms :initarg :atoms :accessor atoms)))
-
-(defclass stereoconfiguration ()
-  ((atom-name :initarg :atom-name :accessor atom-name)
-   (configuration :initarg :configuration :accessor configuration)))
-
-(defmethod print-object ((obj stereoconfiguration) stream)
-  (print-unreadable-object (obj stream :type t)
-    (format stream "~a ~a" (atom-name obj) (configuration obj))))
-
-(defclass stereoisomer ()
-  ((name :initarg :name :accessor name)
-   (pdb :initarg :pdb :accessor pdb)
-   (stereoisomer-index :initarg :stereoisomer-index :accessor stereoisomer-index)
-   (configurations :initarg :configurations :accessor configurations)))
-
-(defmethod print-object ((obj stereoisomer) stream)
-  (print-unreadable-object (obj stream :type t)
-    (format stream "~a ~s" (name obj) (configurations obj))))
-
-(defclass constitution ()
-  ((name :initarg :name :accessor name)
-   (constitution-atoms :initarg :constitution-atoms :accessor constitution-atoms)
-   (plugs :initarg :plugs :accessor plugs)
-   (topology-list :initform nil :initarg :topology-list :accessor topology-list)
-   (stereo-information :initarg :stereo-information :accessor stereo-information)))
-
-(defclass stereoisomer-atom ()
-  ((atom-name :initarg :atom-name :accessor atom-name)
-   (constitution-atom-index :initarg :constitution-atom-index :accessor constitution-atom-index)
-   (atom-charge :initarg :atom-charge :accessor atom-charge)
-   (atom-type :initarg :atom-type :accessor atom-type)))
-
-(defclass stereoisomer-virtual-atom (stereoisomer-atom)
-  ())
-
-(defclass topology ()
-  ((name :initarg :name :accessor name)
-   (constitution :initarg :constitution :accessor constitution)
-   (property-list :initform nil :initarg :property-list :accessor property-list)
-   (plugs :initarg :plugs :accessor plugs)
-   (joint-template :initarg :joint-template :accessor joint-template)
-   (stereoisomer-atoms :initform (make-array 4 :adjustable t :fill-pointer 0)
-                       :initarg :stereoisomer-atoms :accessor stereoisomer-atoms)
-   ))
-
-(defmethod print-object ((obj topology) stream)
-  (print-unreadable-object (obj stream :type t)
-    (format stream "~a" (name obj))))
-
-(defun has-plug-named (topology plug-name)
-  (gethash plug-name (plugs topology)))
-
-(defun plug-named (topology plug-name)
-  (gethash plug-name (plugs topology)))
-
+(defun ensure-all-atom-names-are-unique (residue)
+  (let ((ht (make-hash-table)))
+    (chem:do-atoms (atm residue)
+      (when (gethash (chem:atom/atom-name atm) ht)
+        (error "The atom name ~a is not unique" (chem:atom/atom-name atm))))))
+      
+(defun make-constitution-atoms-from-residue (residue &optional verbose)
+  (ensure-all-atom-names-are-unique residue)
+  (let ((caindex -1)
+        (constitution-atoms (make-array 16 :adjustable t :fill-pointer 0))
+        (atoms-to-index-map (make-hash-table)))
+    (chem:do-atoms (atm residue)
+      (let ((constitution-atom (make-constitution-atom-from-atom atm (incf caindex))))
+        (vector-push-extend constitution-atom constitution-atoms)
+        (setf (gethash atm atoms-to-index-map) caindex)))
+    (chem:do-atoms (atm residue)
+      (let* ((cai (gethash atm atoms-to-index-map))
+             (constitution-atom (elt constitution-atoms cai)))
+        (define-constitution-atom-bonding constitution-atom atm atoms-to-index-map)))
+    constitution-atoms))

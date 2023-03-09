@@ -51,11 +51,11 @@
                  (return-from bad-carbon-geometry-p (format nil "member 4 ring bad sp3 angle(90.0.lt.angle.lt.130.0) ~7,2f between ~a-~a-~a"
                                                             angle (chem:get-name n1) (chem:get-name n2) (chem:get-name n3))))))
          (bad-sp2-angle-p (angle n1 n2 n3)
-           (when (or (< angle 100.0) (> angle 134.0))
-             (return-from bad-carbon-geometry-p (format nil "bad sp2 angle(100.0.lt.angle.lt.134.0) ~7,2f between ~a-~a-~a"
+           (when (or (< angle 100.0) (> angle 140.0))
+             (return-from bad-carbon-geometry-p (format nil "bad sp2 angle(100.0.lt.angle.lt.140.0) ~7,2f between ~a-~a-~a"
                                                         angle (chem:get-name n1) (chem:get-name n2) (chem:get-name n3)))))
          (bad-angles-p (aggregate)
-           (cando:do-atoms (atm aggregate)
+           (chem:do-atoms (atm aggregate)
              (let ((vx (chem:get-position atm))
                    (in-member-3-ring (gethash atm member-3-rings))
                    (in-member-4-ring (gethash atm member-4-rings))
@@ -161,7 +161,7 @@
 (defparameter *dkp* (chem:make-chem-info-graph (chem:compile-smarts "[C&H1:0]1-[N:1](-[C:2])-[C:3](=[O:4])-[C&H0:5]-[N:6](-[C&H2:7])-[C:8]1(=[O:9])")))
 
 (defun bad-dkp-geometry-p (agg)
-  (let* ((mol (cando:mol agg 0))
+  (let* ((mol (chem:content-at agg 0))
          (mol-graph (chem:make-molecule-graph-from-molecule mol))
          (matches (chem:boost-graph-vf2 *dkp* mol-graph)))
     (loop for match in matches
@@ -196,8 +196,8 @@
 
 (defun bad-aromatic-geometry-p (agg)
   (unless chem:*current-rings* (error "The chem:*current-rings* dynamic variable must be defined - use (chem:identify-rings matter)"))
-  (aromaticity:with-aromaticity-information (agg :am1bcc)
-    (let* ((mol (cando:mol agg 0))
+  (chem:with-aromaticity-information (agg :am1bcc)
+    (let* ((mol (chem:content-at agg 0))
            (mol-graph (chem:make-molecule-graph-from-molecule mol))
            (matches (chem:boost-graph-vf2 *planar-aromatic* mol-graph)))
       (loop for match in matches

@@ -3,52 +3,54 @@
 (defclass conformation ()
   ((monomer-positions :initarg :monomer-positions :accessor monomer-positions)
    (monomer-contexts :type hash-table :initarg :monomer-contexts :accessor monomer-contexts)
-   (oligomer :initarg :oligomer :accessor oligomer)
+   (oligomers :initarg :oligomers :accessor oligomers)
    (aggregate :initarg :aggregate :accessor aggregate)
    (energy-function :initarg :energy-function :accessor energy-function)
    (ataggregate :initarg :ataggregate :accessor ataggregate)
    (joint-tree :initarg :joint-tree :accessor joint-tree)))
 
-(cando:make-class-save-load conformation)
+(cando.serialize:make-class-save-load conformation)
 
 (defgeneric foldamer-monomer-context (focus-monomer oligomer foldamer)
   (:documentation "Return a monomer-context for a monomer in the oligomer using the foldamer.
 Specialize the foldamer argument to provide methods"))
 
-(defun make-conformation (oligomer &key focus-monomer)
-  "Build a conformation for the oligomer.   If focus-monomer is set (to a monomer) then
-   only worry about that monomers monomer-context."
-  (let* ((oligomer-space (oligomer-space oligomer))
-         (foldamer (foldamer oligomer-space))
-         (monomer-contexts (make-hash-table)))
-    (if focus-monomer
-        (let ((monomer-context (foldamer-monomer-context focus-monomer oligomer foldamer)))
-          (setf (gethash focus-monomer monomer-contexts) monomer-context))
-        (loop for monomer across (monomers oligomer-space)
-              for monomer-context = (foldamer-monomer-context monomer oligomer foldamer)
-              do (setf (gethash monomer monomer-contexts) monomer-context)))
-    (multiple-value-bind (aggregate molecule monomer-positions)
-        (topology:build-molecule oligomer)
-      (let* ((ataggregate (make-instance 'ataggregate :aggregate aggregate))
-             (joint-tree (make-joint-tree)))
-        (resize-atmolecules ataggregate 1)
-        (let ((molecule-index 0))
-          ;; This is where I would invoke Conformation_O::buildMoleculeUsingOligomer
-          ;; Use the monomers-to-topologys
-          (let* ((energy-function (chem:make-energy-function :matter aggregate))
-                 (atmolecule (build-atmolecule-using-oligomer oligomer molecule molecule-index monomer-positions joint-tree (chem:atom-table energy-function)))
-                 )
-            (put-atmolecule ataggregate atmolecule molecule-index)
-            (let ((conf (make-instance 'conformation
-                                       :monomer-positions monomer-positions
-                                       :monomer-contexts monomer-contexts
-                                       :oligomer oligomer
-                                       :aggregate aggregate
-                                       :energy-function energy-function
-                                       :ataggregate ataggregate
-                                       :joint-tree joint-tree)))
-              conf
-              )))))))
+(defun make-conformation (oligomers &key monomer-order)
+  "Build a conformation for the oligomers."
+  (let* ((aggregate (chem:make-aggregate :all))
+         (monomer-positions (make-hash-table))
+         (oligomer-molecules (loop for oligomer in oligomers
+                                   for molecule = (topology:build-molecule oligomer aggregate monomer-positions)
+                                   collect (cons oligomer molecule)))
+         (monomer-contexts (make-hash-table))
+         (ataggregate (let ((atagg (make-instance 'ataggregate :aggregate aggregate)))
+                        (resize-atmolecules atagg (length oligomers))
+                        atagg))
+         (joint-tree (make-joint-tree))
+         (energy-function (chem:make-energy-function :matter aggregate))
+         )
+    (loop for oligomer-molecule in oligomer-molecules
+          for oligomer = (car oligomer-molecule)
+          for molecule = (cdr oligomer-molecule)
+          for oligomer-space = (oligomer-space oligomer)
+          for foldamer = (foldamer oligomer-space)
+          for molecule-index from 0
+          do (loop for monomer across (monomers oligomer-space)
+                   for monomer-context = (foldamer-monomer-context monomer oligomer foldamer)
+                   do (setf (gethash monomer monomer-contexts) monomer-context))
+             ;; This is where I would invoke Conformation_O::buildMoleculeUsingOligomer
+             ;; Use the monomers-to-topologys
+          do (let ((atmolecule (build-atmolecule-using-oligomer oligomer molecule molecule-index monomer-positions joint-tree (chem:atom-table energy-function))))
+               (put-atmolecule ataggregate atmolecule molecule-index))
+          finally (return (make-instance 'conformation
+                                         :monomer-positions monomer-positions
+                                         :monomer-contexts monomer-contexts
+                                         :oligomers (list oligomer)
+                                         :aggregate aggregate
+                                         :energy-function energy-function
+                                         :ataggregate ataggregate
+                                         :joint-tree joint-tree)))
+    ))
 
 (defun walk-atoms-joints (conformation callback)
   (let ((aggregate (aggregate conformation))
@@ -99,30 +101,31 @@ Specialize the foldamer argument to provide methods"))
 
 (defun fill-internals-from-oligomer-shape (conf fragments oligomer-shape)
   "Fill internal coordinates from the fragments"
-  (loop with atagg = (ataggregate conf)
-        with atmol = (elt (atmolecules atagg) 0)
-        for monomer in (ordered-monomers (oligomer conf))
-        for monomer-context = (gethash monomer (monomer-contexts conf))
-        for fragment-conformations = (let ((frag (gethash monomer-context (monomer-context-to-fragment-conformations fragments))))
-                                       (unless frag
-                                         (error "Could not find monomer-context ~a" monomer-context))
-                                       frag)
-        for monomer-index = (gethash monomer (monomer-positions conf))
-        for atres = (elt (atresidues atmol) monomer-index)
-        for monomer-shape = (let ((ms (gethash monomer (monomer-shape-map oligomer-shape))))
-                              (unless ms (error "Could not get monomer-shape for monomer ~a" monomer))
-                              ms)
-        for fragment-conformation-index = (let ((fi (fragment-conformation-index monomer-shape)))
-                                            (unless fi (break "Could not find fragment-conformation-index ~a ~a" fragment-conformation-index monomer-shape))
-                                            fi)
-        for fragment-internals = (let ((fragments (fragments fragment-conformations)))
-                                   (unless fragments
-                                     (error "fragments is NIL for context ~a" monomer-context))
-                                   (elt (fragments fragment-conformations) fragment-conformation-index))
-        do (loop for joint across (joints atres)
-                 for internal across (internals fragment-internals)
-                 do (fill-joint-internals joint internal))
-        ))
+  (loop for oligomer in (oligomers conf)
+        do (loop with atagg = (ataggregate conf)
+                 with atmol = (elt (atmolecules atagg) 0)
+                 for monomer in (ordered-monomers oligomer)
+                 for monomer-context = (gethash monomer (monomer-contexts conf))
+                 for fragment-conformations = (let ((frag (gethash monomer-context (monomer-context-to-fragment-conformations fragments))))
+                                                (unless frag
+                                                  (error "Could not find monomer-context ~a" monomer-context))
+                                                frag)
+                 for monomer-index = (gethash monomer (monomer-positions conf))
+                 for atres = (elt (atresidues atmol) monomer-index)
+                 for monomer-shape = (let ((ms (gethash monomer (monomer-shape-map oligomer-shape))))
+                                       (unless ms (error "Could not get monomer-shape for monomer ~a" monomer))
+                                       ms)
+                 for fragment-conformation-index = (let ((fi (fragment-conformation-index monomer-shape)))
+                                                     (unless fi (break "Could not find fragment-conformation-index ~a ~a" fragment-conformation-index monomer-shape))
+                                                     fi)
+                 for fragment-internals = (let ((fragments (fragments fragment-conformations)))
+                                            (unless fragments
+                                              (error "fragments is NIL for context ~a" monomer-context))
+                                            (elt (fragments fragment-conformations) fragment-conformation-index))
+                 do (loop for joint across (joints atres)
+                          for internal across (internals fragment-internals)
+                          do (fill-joint-internals joint internal))
+                 )))
 
 
 
@@ -144,20 +147,21 @@ Specialize the foldamer argument to provide methods"))
 
 (defun fill-internals-from-fragments-for-monomers-named (conf fragments monomer-names)
   "Fill internal coordinates from the fragments"
-  (loop with atagg = (ataggregate conf)
-        with atmol = (elt (atmolecules atagg) 0)
-        for monomer across (monomers (oligomer conf))
-        when (member (topology:current-stereoisomer-name monomer (oligomer conf)) monomer-names)
-          do (let* ((monomer-context (gethash monomer (monomer-contexts conf)))
-                    (frags (gethash monomer-context (monomer-context-to-fragment-conformations fragments)))
-                    (monomer-index (gethash monomer (monomer-positions conf)))
-                    (atres (elt (atresidues atmol) monomer-index))
-                    (fragment-conformations (gethash monomer-context (monomer-context-to-fragment-conformations fragments)))
-                    (rand-limit (length (fragments fragment-conformations)))
-                    (rand-index (random rand-limit))
-                    (fragment-internals (elt (fragments fragment-conformations) rand-index)))
-               (loop for joint across (joints atres)
-                     for internal in (internals fragment-internals)
-                     do (fill-joint-internals joint internal))
-               )))
+  (loop for oligomer in (oligomers conf)
+        do (loop with atagg = (ataggregate conf)
+                 with atmol = (elt (atmolecules atagg) 0)
+                 for monomer across (monomers oligomer)
+                 when (member (topology:current-stereoisomer-name monomer oligomer) monomer-names)
+                   do (let* ((monomer-context (gethash monomer (monomer-contexts conf)))
+                             (frags (gethash monomer-context (monomer-context-to-fragment-conformations fragments)))
+                             (monomer-index (gethash monomer (monomer-positions conf)))
+                             (atres (elt (atresidues atmol) monomer-index))
+                             (fragment-conformations (gethash monomer-context (monomer-context-to-fragment-conformations fragments)))
+                             (rand-limit (length (fragments fragment-conformations)))
+                             (rand-index (random rand-limit))
+                             (fragment-internals (elt (fragments fragment-conformations) rand-index)))
+                        (loop for joint across (joints atres)
+                              for internal in (internals fragment-internals)
+                              do (fill-joint-internals joint internal))
+                        ))))
 

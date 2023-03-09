@@ -61,7 +61,8 @@ If (null parent-joint) then this is the root atresidue
                    (when (typep plug 'out-plug)
                      (let* ((out-plug plug)
                             (out-plug-name (name out-plug))
-                            (atomb0-name (elt (atom-names out-plug) 0))
+                            (plug-bond (elt (plug-bonds out-plug) 0))
+                            (atomb0-name (atom-name plug-bond))
                             (constitution-bond0-atomid (position atomb0-name constitution-atoms :key #'atom-name))
                             (joint-bond0-parent (if constitution-bond0-atomid
                                                     (aref (joints atresidue) constitution-bond0-atomid)

@@ -2,5 +2,5 @@
 
 
 
-(defparameter confs (cando:load-cando "conformations.cando"))
+(defparameter confs (cando.serialize:load-cando "conformations.cando"))
 

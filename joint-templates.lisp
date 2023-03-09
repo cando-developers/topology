@@ -6,7 +6,7 @@
    (constitution-atoms-index :initarg :constitution-atoms-index :accessor constitution-atoms-index)
    ))
 
-(cando:make-class-save-load joint-template
+(cando.serialize:make-class-save-load joint-template
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -16,7 +16,7 @@
   ((children :initform nil :initarg :children :accessor children)
    ))
 
-(cando:make-class-save-load
+(cando.serialize:make-class-save-load
  bonded-joint-template
  :print-unreadably
  (lambda (obj stream)
@@ -32,7 +32,7 @@
 (defclass in-plug-bonded-joint-template (bonded-joint-template)
   ((in-plug :initarg :in-plug :accessor in-plug)))
 
-(cando:make-class-save-load
+(cando.serialize:make-class-save-load
  in-plug-bonded-joint-template
  :print-unreadably
  (lambda (obj stream)
@@ -49,7 +49,7 @@
 (defclass complex-bonded-joint-template (bonded-joint-template)
   ((input-stub-joints :initform (make-array 2) :initarg :input-stub-joints :accessor input-stub-joints)))
 
-(cando:make-class-save-load
+(cando.serialize:make-class-save-load
  complex-bonded-joint-template
  :print-unreadably
  (lambda (obj stream)
@@ -83,7 +83,7 @@
 (defclass jump-joint-template (joint-template)
   ((children :initform nil :initarg :children :accessor children)))
 
-(cando:make-class-save-load jump-joint-template)
+(cando.serialize:make-class-save-load jump-joint-template)
 
 (defun make-jump-joint-template (constitution-atoms-index &key atom-name)
   (make-instance 'jump-joint-template
@@ -181,32 +181,13 @@
   (let ((root-node (topology:root-node graph)))
     (build-joint-template-recursively nil root-node (topology:in-plug graph))))
 
-(defun topologies-from-graph (graph)
-  (let* ((constitution (topology:constitution-from-graph graph))
-         (plugs (topology:plugs constitution))
-         (stereo-information (topology:stereo-information constitution))
-         (tops (loop for stereoisomer in stereo-information
-                     for name = (topology:name stereoisomer)
-                     for configurations = (topology:configurations stereoisomer)
-                     for joint-template = (build-joint-template graph)
-                     for topology = (make-instance 'topology:topology
-                                                   :name name
-                                                   :constitution constitution
-                                                   :plugs plugs
-                                                   :joint-template joint-template
-                                                   :stereoisomer-atoms configurations)
-                     do (push topology (topology:topology-list constitution))
-                     do (setf (topology:property-list topology) (list* :joint-template joint-template (topology:property-list topology)))
-                     do (cando:register-topology topology name)
-                     collect topology)))
-    (setf (topology:topology-list constitution) tops)
-    tops))
-
 (defun kin:joint-calculate-position-index (joint atom-table)
   (let ((atom-id (kin:joint/id joint)))
     (destructuring-bind (molecule-id residue-id atom-id)
         atom-id
-      (let* ((mol (aref (chem:atom-table/atom-table-molecules atom-table) molecule-id))
+      (let* ((mol (if (< molecule-id (length (chem:atom-table/atom-table-molecules atom-table)))
+                      (aref (chem:atom-table/atom-table-molecules atom-table) molecule-id)
+                      (error "The atom-table/atom-table-molecules is wrong")))
              (res (chem:content-at mol residue-id))
              (atm (chem:content-at res atom-id)))
         (format t "joint-calculate-position-index number-of-atoms: ~a~%" (chem:atom-table/get-number-of-atoms atom-table))

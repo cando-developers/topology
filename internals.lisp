@@ -54,7 +54,7 @@
 
 (defgeneric copy-internal (internal))
 
-(cando:make-class-save-load
+(cando.serialize:make-class-save-load
  internal
  :print-unreadably
  (lambda (obj stream)
@@ -64,7 +64,7 @@
 (defclass jump-internal (internal)
   ())
 
-(cando:make-class-save-load jump-internal)
+(cando.serialize:make-class-save-load jump-internal)
 
 (defclass bonded-internal (internal)
   ((bond :initarg :bond :accessor bond)
@@ -78,7 +78,7 @@
                  :angle (angle internal)
                  :dihedral (dihedral internal)))
 
-(cando:make-class-save-load
+(cando.serialize:make-class-save-load
  bonded-internal
  :print-unreadably
  (lambda (obj stream)
@@ -88,7 +88,7 @@
 (defclass complex-bonded-internal (bonded-internal)
   ())
 
-(cando:make-class-save-load complex-bonded-internal)
+(cando.serialize:make-class-save-load complex-bonded-internal)
 
 (defclass fragment-internals (serial:serializable)
   ((index :initarg :index :accessor index)
@@ -96,7 +96,7 @@
    (internals :initarg :internals :accessor internals)
    (out-of-focus-internals :initarg :out-of-focus-internals :accessor out-of-focus-internals)))
 
-(cando:make-class-save-load fragment-internals)
+(cando.serialize:make-class-save-load fragment-internals)
 
 (defun copy-fragment-internals (fragment-internals)
   (make-instance 'fragment-internals
@@ -114,14 +114,14 @@
    (total-count :initform 0 :initarg :total-count :accessor total-count)
    (fragments :initform (make-array 16 :adjustable t :fill-pointer 0) :initarg :fragments :accessor fragments)))
 
-(cando:make-class-save-load fragment-conformations)
+(cando.serialize:make-class-save-load fragment-conformations)
 
 (defclass fragment-conformations-map (serial:serializable)
   ((monomer-context-to-fragment-conformations :initform (make-hash-table :test 'equal)
                                               :initarg :monomer-context-to-fragment-conformations
                                               :accessor monomer-context-to-fragment-conformations)))
 
-(cando:make-class-save-load fragment-conformations-map
+(cando.serialize:make-class-save-load fragment-conformations-map
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t))))
@@ -131,7 +131,7 @@
                      :initarg :fragment-matches
                      :accessor fragment-matches)))
 
-(cando:make-class-save-load matched-fragment-conformations-map)
+(cando.serialize:make-class-save-load matched-fragment-conformations-map)
 
 (defun matched-fragment-conformations-summary (matched-fragment-conformations-map)
   (let ((total-fragment-conformations 0)
@@ -197,10 +197,10 @@
   nil)
 
 (defun save-fragment-conformations (fragment-conformations filename)
-  (cando:save-cando fragment-conformations filename))
+  (cando.serialize:save-cando fragment-conformations filename))
 
 (defun load-fragment-conformations (filename)
-  (cando:load-cando filename))
+  (cando.serialize:load-cando filename))
 
 (defun dump-fragment-internals (fragment-internals finternals)
   (format finternals "begin-conformation ~a~%" (index fragment-internals))

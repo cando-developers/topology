@@ -4,7 +4,7 @@
 (defclass monomer-match-node ()
   ((names :initarg :names :accessor names)))
 
-(cando:make-class-save-load monomer-match-node
+(cando.serialize:make-class-save-load monomer-match-node
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -14,7 +14,7 @@
   ((plug-name :initarg :plug-name :accessor plug-name)
    (monomer-match-node :initarg :monomer-match-node :accessor monomer-match-node)))
 
-(cando:make-class-save-load plug-to-monomer-node
+(cando.serialize:make-class-save-load plug-to-monomer-node
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -24,7 +24,7 @@
   ((head :initarg :head :accessor head)
    (tail :initarg :tail :accessor tail)))
 
-(cando:make-class-save-load chain-node
+(cando.serialize:make-class-save-load chain-node
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
@@ -35,7 +35,7 @@
   ((left :initarg :left :accessor left)
    (right :initarg :right :accessor right)))
 
-(cando:make-class-save-load branch-node
+(cando.serialize:make-class-save-load branch-node
  :print-unreadably
  (lambda (obj stream)
    (print-unreadable-object (obj stream :type t)
