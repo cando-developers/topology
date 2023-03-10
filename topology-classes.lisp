@@ -239,6 +239,12 @@
                                                         :atom-name bond0
                                                         :bond-order bond-order0)))))
 
+(defun in-plug-name (coupling-name)
+  (intern (format nil "~c~a" #\- (string coupling-name)) :keyword))
+
+(defun out-plug-name (coupling-name)
+  (intern (format nil "~c~a" #\+ (string coupling-name)) :keyword))
+
 (defun is-in-plug-name (name)
   (let ((first-char (elt (string name) 0)))
     (char= first-char #\-)))
@@ -579,6 +585,7 @@ Examples:
           do (chem:set-charge atm (atom-charge sia))
           do (chem:set-properties atm (copy-seq (properties ca)))
           do (chem:set-content-at residue idx atm)
+          do (chem:setf-needs-build atm t)
           )
     #|
     ConstitutionAtoms_sp constitutionAtoms = this->_Constitution->getConstitutionAtoms(); ; ; ;

@@ -38,20 +38,14 @@
                    when (< atm1-index atm2-index)
                      do (chem:bond-to atm1 atm2 (topology:order bond))))
     ;; Define the :chiral atoms
-    (loop for stereoisomer = (let ((si (stereoisomer topology)))
-                               (unless si
-                                 (break "Check topology ~a" topology))
-                               si)
-          for _1 = (format t "topology ~s  stereoisomer ~s~%" topology stereoisomer)
-          for stereoisomer-atoms = (stereoisomer-atoms stereoisomer)
-          for index below (length stereoisomer-atoms)
-          for stereoisomer-atom = (elt stereoisomer-atoms index)
-          for atom-name = (atom-name stereoisomer-atom)
-          for atm = (gethash atom-name named-atoms)
-          for stereochemistry-type = :chiral
-          do (unless atm (break "Could not find atm named ~a in ~a" atom-name named-atoms))
-          do (chem:set-stereochemistry-type atm stereochemistry-type)
-          do (chem:set-configuration atm (configuration stereoisomer-atom)))
+    (let* ((stereoisomer (stereoisomer topology))
+           (stereoconfigurations (stereoconfigurations stereoisomer)))
+      (loop for stereoconfiguration in stereoconfigurations
+            for atom-name = (atom-name stereoconfiguration)
+            for configuration = (configuration stereoconfiguration)
+            for atm = (gethash atom-name named-atoms)
+            do (chem:set-stereochemistry-type atm :chiral)
+            do (chem:set-configuration atm configuration)))
     ;; assign stereochem for prochiral atoms so they aren't random
     (chem:do-atoms (atm residue)
       (when (= (chem:number-of-bonds atm) 4)
@@ -80,6 +74,7 @@
   (let ((residue (build-residue-for-monomer-name topology (name topology)))
         (mol (chem:make-molecule (name topology))))
     (chem:add-matter mol residue)
+    (break "check molecule ~s" mol)
     mol))
 
 #+(or)
