@@ -392,7 +392,6 @@ So if name is \"ALA\" and stereoisomer-index is 1 the name becomes ALA{CA/S}."
                       (error "Do not specify stereochemistry-type ~s for ~a" stereochemistry-type constitution-atom))
                      )
                 finally (return (values stereocenter-info stereoisomer-atoms)))
-        #+(or)(format t "stereocenter-info = ~s~%" stereocenter-info)
         ;; build stereochemistry here
         (let ((stereo-information (build-stereo-information (name graph) stereocenter-info stereoisomer-atoms)))
           (values (make-instance 'constitution
